@@ -144,14 +144,17 @@ def volume_constrained_structural_optimization_function(
     ci = None
 
     ce = pygransoStruct()
-    # Directly handle the binary contraint
-    ce.c1 = (torch.mean(x_phys[mask]) / args["volfrac"]) - 1.0  # noqa
-
-    # Directly handle the volume constraint
+    # Directly handle the volume contraint
     total_elements = x_phys[mask].numel()
+    volume_constraint = (torch.mean(x_phys[mask]) / args['volfrac']) - 1.0
+    ce.c1 = volume_constraint  # noqa
+
+    # Directly handle the binary constraint
     epsilon = args["epsilon"]
-    binary_constraint = x_phys[mask] * (1 - x_phys[mask])
-    ce.c2 = torch.norm(binary_constraint, p=1) / total_elements - epsilon
+    binary_constraint = (
+        torch.norm(x_phys[mask] * (1 - x_phys[mask]), p=1) / total_elements
+    ) - epsilon
+    ce.c2 = binary_constraint
 
     # What if we enforce a symmetry constraint as well?
     midpoint = x_phys.shape[0] // 2
@@ -162,25 +165,22 @@ def volume_constrained_structural_optimization_function(
     if symmetry_constraint_list is not None:
         symmetry_constraint = (
             torch.norm(x_phys_top - torch.flip(x_phys_bottom, [0]), p=1)
-            / x_phys.numel()
-        )
-        ce.c3 = symmetry_constraint - epsilon
+            / total_elements
+        ) - epsilon
+        ce.c3 = symmetry_constraint
 
         # Add the data to the list
-        symmetry_constraint_value = symmetry_constraint - epsilon
+        symmetry_constraint_value = symmetry_constraint
         symmetry_constraint_value = float(
             symmetry_constraint_value.detach().cpu().numpy()
         )
         symmetry_constraint_list.append(symmetry_constraint_value)
 
     # We need to save the information from the trials about volume
-    volume_value = (torch.mean(x_phys[mask]) / args["volfrac"]) - 1.0
-    volume_constraint_list.append(volume_value.detach().cpu().numpy())
+    volume_constraint_list.append(volume_constraint.detach().cpu().numpy())
 
     # Binary constraint
-    binary_constraint_value = torch.mean(binary_constraint) - epsilon
-    binary_constraint_value = float(binary_constraint_value.detach().cpu().numpy())
-    binary_constraint_list.append(binary_constraint_value)
+    binary_constraint_list.append(binary_constraint.detach().cpu().numpy())
 
     # Update the counter by one
     iter_counter += 1
@@ -233,7 +233,7 @@ def train_pygranso(
     trials_initial_volumes = []
 
     for index, seed in enumerate(range(0, num_trials)):
-        models.set_seed((seed + 1) * 100)
+        models.set_seed(seed * 10)
         counter = 0
         np.random.seed(seed)
         torch.random.manual_seed(seed)
@@ -323,8 +323,8 @@ def train_pygranso(
         opts.maxit = maxit
         opts.print_frequency = 20
         opts.stat_l2_model = False
-        opts.viol_eq_tol = 1e-5
-        opts.opt_tol = 1e-5
+        opts.viol_eq_tol = 1e-7
+        opts.opt_tol = 1e-7
 
         mHLF_obj = utils.HaltLog()
         halt_log_fn, get_log_fn = mHLF_obj.makeHaltLogFunctions(opts.maxit)

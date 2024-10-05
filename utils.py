@@ -1,19 +1,15 @@
 # stdlib
 import gc
-import os
 import warnings
 from typing import Any, Dict, Tuple
 
 # third party
 import autograd
 import autograd.numpy as anp
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import scipy.sparse
 import scipy.sparse.linalg
 import torch
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pygranso.pygransoStruct import pygransoStruct
 from torch.autograd import Function
 
@@ -394,150 +390,6 @@ def get_devices():
         device = torch.device(gpu_name_list[0])
 
     return device
-
-
-def build_loss_plots(problem_name, trials_dict, neptune_logging):
-    """
-    Build the plots for all of the different trials. We will
-    also build and compare the median and mean losses
-    for google vs pygranso
-    """
-    # Gather the pygranso losses
-    pygranso_losses = trials_dict["pygranso_losses"]
-    google_losses = trials_dict["google_losses"]
-
-    # Concat all of the losses for pygranso
-    all_pygranso_losses_df = pd.concat(pygranso_losses, axis=1)
-    all_pygranso_losses_df.columns = [
-        f"pygranso-trial-{i}" for i in range(all_pygranso_losses_df.shape[1])
-    ]
-
-    # Concat all of the losses for google
-    all_google_losses_df = pd.concat(google_losses, axis=1)
-    all_google_losses_df.columns = [
-        f"google-trial-{i}" for i in range(all_google_losses_df.shape[1])
-    ]
-
-    # Build the loss plots for pygranso
-    fig, ax = plt.subplots(1, 1, figsize=(10, 4))
-    all_pygranso_losses_df.ffill().plot(legend=False, ax=ax, lw=2)
-    ax.set_title(f"Training loss PyGranso - {problem_name}")
-    ax.set_xlabel("Optimization Step")
-    ax.set_ylabel("Compliance (loss)")
-    ax.grid()
-
-    neptune_logging["pygranso-losses-image"].upload(fig)
-
-    plt.close()
-
-    # Build the loss plots for google
-    fig, ax = plt.subplots(1, 1, figsize=(10, 4))
-    all_google_losses_df.ffill().plot(legend=False, ax=ax, lw=2)
-    ax.set_title(f"Training loss Google - {problem_name}")
-    ax.set_xlabel("Optimization Step")
-    ax.set_ylabel("Compliance (loss)")
-    ax.grid()
-
-    neptune_logging["google-losses-image"].upload(fig)
-
-    plt.close()
-
-    # Calculate the mean and median values across all trials and compare
-    pygranso_median_df = all_pygranso_losses_df.median(axis=1)
-    google_median_df = all_google_losses_df.median(axis=1)
-    median_report_df = pd.concat([pygranso_median_df, google_median_df], axis=1)
-    median_report_df = median_report_df.cummin().ffill()
-    median_report_df.columns = ["pygranso-cnn", "google-cnn"]
-
-    # Plot the losses
-    fig, ax = plt.subplots(1, 1, figsize=(10, 4))
-    median_report_df.plot(ax=ax, lw=2)
-    ax.set_title("Model Comparisons")
-    ax.set_xlabel("Optimization Step")
-    ax.set_ylabel("Compliance (loss)")
-    ax.grid()
-
-    neptune_logging["median-model-comparisons"].upload(fig)
-
-    plt.close()
-
-
-def build_final_design(
-    problem_name,
-    final_design,
-    compliance,
-    requires_flip=False,
-    total_frames=1,
-    figsize=(10, 6),
-):
-    """
-    Function to build and display the stages of the final structure.
-    For this plot we consider only the best structure that was found
-    """
-
-    # Set up the final design for the bridge
-    # TODO: Depending on how many sturctures we want there may
-    # be more modification
-    if requires_flip:
-        final_frame = final_design
-        revered_final_frame = final_frame[:, ::-1]
-
-        # We stack the frames and replicate for the bridge
-        final_design = np.hstack([final_frame, revered_final_frame] * total_frames)
-
-    # Setup the figure
-    fig, axes = plt.subplots(1, 1, figsize=figsize)
-
-    im = axes.imshow(final_design, cmap="Greys")
-    axes.set_axis_off()
-    axes.set_title(f"{problem_name} / Comp={compliance}")
-
-    divider = make_axes_locatable(axes)
-    cax = divider.append_axes("bottom", size="10%", pad=0.05)
-    fig.colorbar(im, orientation="horizontal", cax=cax)
-    fig.tight_layout()
-
-    return fig
-
-
-def build_structure_design(problem_name, trials, display="vertical", figsize=(10, 6)):
-    """
-    Function to build and display the stages of the final structure.
-    For this plot we consider only the best structure that was found
-    """
-    # Get the final designs
-    final_designs = trials[2]
-
-    # Get 5 structures through time and plot them
-    if display == "vertical":
-        fig, axes = plt.subplots(5, 1, figsize=figsize)
-    elif display == "horizonal":
-        fig, axes = plt.subplots(1, 5, figsize=figsize)
-    else:
-        raise ValueError("Only options are horizonal and vertial!")
-
-    # flatten the axes
-    axes = axes.flatten()
-
-    # Split the arrays
-    indexes = np.arange(len(final_designs))
-    structures = np.array_split(indexes, 5)
-    for index, step in enumerate(structures):
-        step = int(step[-1])
-        axes[index].imshow(final_designs[step])
-        axes[index].set_xlabel("x")
-        axes[index].set_ylabel("y")
-        axes[index].set_title(f"iteration={step}")
-
-    # Title for the final plot
-    fig.suptitle(f"{problem_name}")
-    fig.tight_layout()
-
-    # Get the images path to save
-    images_path = "./images"
-    timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %X")
-    images_file = f"{timestamp}_{problem_name}_designs.png"
-    plt.savefig(os.path.join(images_path, images_file))
 
 
 class HaltLog:

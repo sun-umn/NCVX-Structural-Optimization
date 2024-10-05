@@ -7,7 +7,6 @@ from typing import Tuple
 
 # third party
 import click
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
@@ -30,6 +29,52 @@ from TOuNN.TOuNN import TopologyOptimizer
 
 # Filter warnings
 warnings.filterwarnings('ignore')
+
+# Global variables
+CNN_FEATURES = (256, 128, 64, 32, 16)
+MODEL_CONFIGS = {
+    'small': {
+        'latent_size': 96,
+        'dense_channels': 24,
+        'conv_filters': tuple(feature // 4 for feature in CNN_FEATURES),
+    },
+    'medium': {
+        'latent_size': 96,
+        'dense_channels': 24,
+        'conv_filters': tuple(feature // 3 for feature in CNN_FEATURES),
+    },
+    'large': {
+        'latent_size': 96,
+        'dense_channels': 24,
+        'conv_filters': tuple(feature // 2 for feature in CNN_FEATURES),
+    },
+}
+
+PROBLEM_CONFIGS = {
+    # Medium Structures
+    'mbb_beam_96x32_0.5': {
+        'include_symmetry': False,
+    },
+    'anchored_suspended_bridge_128x128_0.1': {
+        'include_symmetry': False,
+    },
+    'l_shape_0.4_128x128_0.3': {
+        'include_symmetry': False,
+    },
+    'cantilever_beam_two_point_96x96_0.4': {
+        'include_symmetry': True,
+    },
+    # Large Structures
+    'mbb_beam_384x128_0.5': {
+        'include_symmetry': False,
+    },
+    'anchored_suspended_bridge_192x192_0.1': {
+        'include_symmetry': False,
+    },
+    'l_shape_0.4_192x192_0.3': {
+        'include_symmetry': False,
+    },
+}
 
 
 # Define the cli group
@@ -65,14 +110,19 @@ def calculate_binary_constraint(design, mask, epsilon):
     """
     Function to compute the binary constraint
     """
-    return np.round(np.mean(design[mask] * (1 - design[mask])) - epsilon, 4)
+    total_elements = len(design[mask].flatten())
+    binary_constraint = (
+        np.linalg.norm(design[mask] * (1 - design[mask]), ord=1) / total_elements
+    ) - epsilon
+    return np.round(binary_constraint, decimals=5)
 
 
 def calculate_volume_constraint(design, mask, volume):
     """
     Function that computes the volume constraint
     """
-    return np.round(np.mean(design[mask]) / volume - 1.0, 4)
+    volume_constraint = (np.mean(design[mask]) / volume) - 1.0
+    return np.round(volume_constraint, decimals=5)
 
 
 def build_outputs(problem_name, outputs, mask, volume, requires_flip, epsilon=1e-3):
@@ -658,220 +708,6 @@ def run_classical_mmto(
     return x, c, mass_fraction
 
 
-@cli.command('run-multi-structure-pipeline')
-@click.option('--model_size', default='medium')
-@click.option('--structure_size', default='medium')
-def run_multi_structure_pipeline(model_size, structure_size):
-    """
-    Task that will build out multiple structures and compare
-    performance against known benchmarks.
-    """
-
-    # CNN parameters
-    cnn_features = (256, 128, 64, 32, 16)
-    kernel_size = (12, 12)
-
-    # Configurations
-    configs = {
-        'tiny': {
-            'latent_size': 96,
-            'dense_channels': 24,
-            'conv_filters': tuple(features // 6 for features in cnn_features),
-        },
-        'xsmall': {
-            'latent_size': 96,
-            'dense_channels': 24,
-            'conv_filters': tuple(features // 5 for features in cnn_features),
-        },
-        'small': {
-            'latent_size': 96,
-            'dense_channels': 24,
-            'conv_filters': tuple(features // 4 for features in cnn_features),
-            'kernel_size': kernel_size,
-        },
-        'medium': {
-            'latent_size': 96,
-            'dense_channels': 24,
-            'conv_filters': tuple(features // 3 for features in cnn_features),
-            'kernel_size': kernel_size,
-        },
-        'large': {
-            'latent_size': 96,
-            'dense_channels': 24,
-            'conv_filters': tuple(features // 2 for features in cnn_features),
-            'kernel_size': kernel_size,
-        },
-        # x-large has been our original architecture
-        'xlarge': {
-            'latent_size': 96,
-            'dense_channels': 24,
-            'conv_filters': tuple(features // 1 for features in cnn_features),
-        },
-    }
-
-    # CNN kwargs
-    cnn_kwargs = configs[model_size]
-
-    # Set seed
-    models.set_seed(0)  # Model seed is set here but results are changing?
-
-    # For testing we will run two experimentation trackers
-    API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
-    PROJECT_NAME = 'Topology-Optimization'
-
-    # Enable wandb
-    wandb.login(key=API_KEY)
-
-    # Initalize wandb
-    # TODO: Save training and validation curves per fold
-    wandb.init(
-        # set the wandb project where this run will be logged
-        project=PROJECT_NAME,
-        tags=['topology-optimization-task', model_size, f'{structure_size}-structures'],
-        config=cnn_kwargs,
-    )
-
-    # Will create directories for saving models
-    save_path = os.path.join(
-        '/home/jusun/dever120/NCVX-Neural-Structural-Optimization/results',
-        f'{wandb.run.id}',
-    )
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-        print(f"The directory {save_path} was created.")
-    else:
-        print(f"The directory {save_path} already exists.")
-
-    # Write the configuration
-    config_filepath = os.path.join(save_path, 'config.txt')
-    with open(config_filepath, 'w') as f:
-        f.write(f'model size = {model_size}; structure size = {structure_size}')
-
-    # Get the device to be used
-    device = utils.get_devices()
-    num_trials = 1
-    maxit = 1500
-    max_iterations = 200
-
-    # Set up the problem names
-    # Last element is to include symmetry
-    if structure_size == 'medium':
-        problem_config = [
-            # # Medium Size Problems
-            # ("mbb_beam_96x32_0.5", False, 1, 50, False),
-            # ("cantilever_beam_full_96x32_0.4", False, 1, 50, False),
-            # ("michell_centered_top_64x128_0.12", True, 1, 50, False),
-            # ("l_shape_0.4_128x128_0.3", False, 1, 50, False),
-            # ("cantilever_beam_two_point_96x96_0.4", False, 1, 50, True),
-            ("anchored_suspended_bridge_128x128_0.1", True, 1, 50, False),
-        ]
-    elif structure_size == 'large':
-        problem_config = [
-            # Large Size Problems
-            # ("l_shape_0.4_192x192_0.25", False, 1, 50, False),
-            # ("mbb_beam_384x128_0.5", False, 1, 50, False),
-            # ("cantilever_beam_full_384x128_0.4", False, 1, 50, False),
-            ("anchored_suspended_bridge_192x192_0.0875", True, 1, 50, False),
-        ]
-
-    # PyGranso function
-    comb_fn = train.volume_constrained_structural_optimization_function
-
-    # Build the problems for pygranso and google
-    PYGRANSO_PROBLEMS_BY_NAME = problems.build_problems_by_name(device=device)
-
-    # For running this we only want one trial
-    # with maximum iterations 1000
-    # structure_outputs = []
-    for (
-        problem_name,
-        requires_flip,
-        total_frames,
-        cax_size,
-        include_symmetry,
-    ) in problem_config:
-        print(f"Building structure: {problem_name}")
-        problem = PYGRANSO_PROBLEMS_BY_NAME.get(problem_name)
-
-        # Get volume assignment
-        args = topo_api.specified_task(problem, device=device)
-        volume = args["volfrac"]
-
-        nely = int(args["nely"])
-        nelx = int(args["nelx"])
-        mask = (torch.broadcast_to(args["mask"], (nely, nelx)) > 0).cpu().numpy()
-
-        # Build the structure with pygranso
-        outputs = train.train_pygranso(
-            problem=problem,
-            device=device,
-            pygranso_combined_function=comb_fn,
-            requires_flip=requires_flip,
-            total_frames=total_frames,
-            cnn_kwargs=cnn_kwargs,
-            num_trials=num_trials,
-            maxit=maxit,
-            include_symmetry=include_symmetry,
-        )
-
-        # Build the outputs
-        pygranso_outputs = build_outputs(
-            problem_name=problem_name,
-            outputs=outputs,
-            mask=mask,
-            volume=volume,
-            requires_flip=requires_flip,
-        )
-
-        # Add TOuNN to the pipeline
-        tounn_outputs = tounn_train_and_outputs(problem, requires_flip)
-
-        # Build google results - lets use our problem library
-        # so we can also have custom structures not in the
-        # google code
-        google_problem = problem
-
-        # Set to numpy for google framework
-        google_problem.normals = google_problem.normals.cpu().numpy()
-        google_problem.forces = google_problem.forces.cpu().numpy()
-
-        if not isinstance(google_problem.mask, int):
-            google_problem.mask = google_problem.mask.cpu().numpy()
-
-        google_problem.mirror_left = True
-        google_problem.mirror_right = False
-
-        ds = train_all(google_problem, max_iterations)
-
-        # Get google outputs
-        benchmark_outputs = build_google_outputs(
-            problem_name=problem_name,
-            iterations=max_iterations,
-            ds=ds,
-            mask=mask,
-            volume=volume,
-            requires_flip=requires_flip,
-        )
-
-        # For each output lets save it
-        # Save PyGranso Results
-        pygranso_filepath = os.path.join(
-            save_path, f'{problem_name}-pygranso-cnn.pickle'
-        )
-        with open(pygranso_filepath, 'wb') as handle:
-            pickle.dump(pygranso_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-        tounn_filepath = os.path.join(save_path, f'{problem_name}-tounn.pickle')
-        with open(tounn_filepath, 'wb') as handle:
-            pickle.dump(tounn_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-        google_filepath = os.path.join(save_path, f'{problem_name}-google.pickle')
-        with open(google_filepath, 'wb') as handle:
-            pickle.dump(benchmark_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    print('Run completed! 🎉')
-
-
 @cli.command('run-multi-material-pipeline')
 @click.option('--problem_name', default='tip_cantilever_beam')
 def run_multi_material_pipeline(problem_name):
@@ -1045,21 +881,6 @@ def run_multi_material_pipeline(problem_name):
             model=model, comb_fn=comb_fn, maxit=first_stage_maxit, device=device
         )
 
-        # # Train PyGranso MMTO - Second Stage
-        # comb_fn = lambda model: train.multi_material_constraint_function(  # noqa
-        #     model,
-        #     initial_compliance,
-        #     ke,
-        #     args,
-        #     add_constraints=True,
-        #     device=device,
-        #     dtype=torch.double,
-        # )
-        #
-        # train.train_pygranso_mmto(
-        #     model=model, comb_fn=comb_fn, maxit=second_stage_maxit, device=device
-        # )
-
         # Get the final design
         compliance, final_design, _ = topo_physics.calculate_multi_material_compliance(
             model, ke, args, device, torch.double
@@ -1132,169 +953,174 @@ def run_multi_material_pipeline(problem_name):
     print('Multi-Material Pipeline Completed! 🏆')
 
 
-@cli.command('run-multi-structure-pygranso-pipeline')
-def run_multi_structure_pygranso_pipeline():
+@cli.command('run-multi-structure-pipeline-v2')
+@click.option('--model_size', default='medium')
+@click.option('--problem_name', default='mbb_beam_96x32_0.5')
+@click.option('--kernel_size', default="12,12")
+@click.option('--num_trials', default=1)
+def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_trials):
     """
     Task that will build out multiple structures and compare
     performance against known benchmarks.
     """
-    # Model size
-    model_size = 'medium'
+    # Top level config
+    device = utils.get_devices()
 
-    # CNN parameters
-    cnn_features = (256, 128, 64, 32, 16)
+    # Max iterations for PyGranso
+    maxit: int = 1500
 
-    # Configurations
-    configs = {
-        'tiny': {
-            'latent_size': 96,
-            'dense_channels': 32,
-            'conv_filters': tuple(features // 6 for features in cnn_features),
-        },
-        'xsmall': {
-            'latent_size': 96,
-            'dense_channels': 32,
-            'conv_filters': tuple(features // 5 for features in cnn_features),
-        },
-        'small': {
-            'latent_size': 96,
-            'dense_channels': 32,
-            'conv_filters': tuple(features // 4 for features in cnn_features),
-        },
-        'medium': {
-            'latent_size': 96,
-            'dense_channels': 32,
-            'conv_filters': tuple(features // 3 for features in cnn_features),
-        },
-        'large': {
-            'latent_size': 96,
-            'dense_channels': 32,
-            'conv_filters': tuple(features // 2 for features in cnn_features),
-        },
-        # x-large has been our original architecture
-        'xlarge': {
-            'latent_size': 96,
-            'dense_channels': 32,
-            'conv_filters': tuple(features // 1 for features in cnn_features),
-        },
-    }
+    # Max iterations for Google-DIP
+    max_iterations = 200
 
-    # CNN kwargs
-    cnn_kwargs = configs[model_size]
-
-    # Set seed
-    models.set_seed(0)  # Model seed is set here but results are changing?
-
-    # For testing we will run two experimentation trackers
+    # For testing, we will run two experimentation trackers
     API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
     PROJECT_NAME = 'Topology-Optimization'
 
     # Enable wandb
     wandb.login(key=API_KEY)
 
+    # CNN kwargs
+    kernel_size_tuple = tuple(int(i) for i in kernel_size.split(','))
+    cnn_kwargs = MODEL_CONFIGS[model_size]
+    cnn_kwargs['kernel_size'] = kernel_size_tuple
+
     # Initalize wandb
-    # TODO: Save training and validation curves per fold
+    trial_tag = 'single'
+    if num_trials > 1:
+        trial_tag = 'multi-trial'
     wandb.init(
         # set the wandb project where this run will be logged
         project=PROJECT_NAME,
-        tags=['topology-optimization-pg-seed-task', model_size],
-        config=cnn_kwargs,
+        tags=[
+            'topology-optimization-task',
+            model_size,
+            problem_name,
+            trial_tag,
+        ],
+        config={
+            'latent_size': cnn_kwargs['latent_size'],
+            'dense_channels': cnn_kwargs['dense_channels'],
+            'conv_filters': cnn_kwargs['conv_filters'],
+            'kernel_size': kernel_size,
+        },
     )
 
-    # Get the device to be used
-    device = utils.get_devices()
-    num_trials = 5
-    maxit = 1500
+    # Create directory for saving the model and
+    # output data
+    save_path = os.path.join(
+        '/home/jusun/dever120/NCVX-Neural-Structural-Optimization/results',
+        f'{wandb.run.id}',
+    )
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        print(f"The directory {save_path} was created.")
+    else:
+        print(f"The directory {save_path} already exists.")
 
-    # Set up the problem names
-    problem_config = [
-        # Medium Size Problems
-        ("mbb_beam_96x32_0.5", True, 1, 50),
-        ("cantilever_beam_full_96x32_0.4", True, 1, 50),
-        ("michell_centered_top_64x128_0.12", True, 1, 50),
-        ("l_shape_0.4_128x128_0.3", True, 1, 50),
-        ("suspended_bridge_192x192_0.0875", True, 1, 50),
-    ]
-
-    # renaming
-    name_mapping = {
-        # Medium Size Problems
-        'mbb_beam_96x32_0.5': 'MBB \n Beam',
-        'cantilever_beam_full_96x32_0.4': 'Cantilever \n Beam',
-        'michell_centered_top_64x128_0.12': 'Michell \n Top',
-        'l_shape_0.4_128x128_0.3': 'L-Shape \n 0.4',
-        "suspended_bridge_128x128_0.1": "Anchored Suspended \n Bridge",
-    }
+    # Write the configuration
+    config_filepath = os.path.join(save_path, 'config.txt')
+    with open(config_filepath, 'w') as f:
+        f.write(
+            f'model size = {model_size}; structure = {problem_name};'
+            f'cnn_kwargs = {cnn_kwargs}'
+        )
 
     # PyGranso function
     comb_fn = train.volume_constrained_structural_optimization_function
 
     # Build the problems for pygranso and google
-    PYGRANSO_PROBLEMS_BY_NAME = problems.build_problems_by_name(device=device)
+    PYGRANSO_PROBLEMS_BY_NAME = problems.build_problems_by_name(device=device)  # noqa
+    PROBLEM_CONFIG = PROBLEM_CONFIGS[problem_name]  # noqa
+    include_symmetry = PROBLEM_CONFIG['include_symmetry']
 
-    # For running this we only want one trial
-    # with maximum iterations 1000
-    structure_outputs = []
-    for problem_name, requires_flip, total_frames, cax_size in problem_config:
-        print(f"Building structure: {problem_name}")
-        problem = PYGRANSO_PROBLEMS_BY_NAME.get(problem_name)
+    # Old configs that need to be refactored
+    requires_flip = False
+    total_frames = 1
 
-        # Build the structure with pygranso
-        outputs = train.train_pygranso(
-            problem=problem,
-            device=device,
-            pygranso_combined_function=comb_fn,
-            requires_flip=requires_flip,
-            total_frames=total_frames,
-            cnn_kwargs=cnn_kwargs,
-            neptune_logging=None,
-            num_trials=num_trials,
-            maxit=maxit,
-        )
-        structure_outputs.append(outputs)
+    # Build structure
+    print(f"Building structure: {problem_name}")
+    problem = PYGRANSO_PROBLEMS_BY_NAME.get(problem_name)
 
-    # Plot the different seeds
-    fig, axes = plt.subplots(len(problem_config), num_trials, figsize=(15, 6))
-    fig.subplots_adjust(wspace=0, hspace=0)
+    # Get volume assignment
+    args = topo_api.specified_task(problem, device=device)
+    volume = args["volfrac"]
 
-    # Get the updated structure names
-    structures = list(name_mapping.values())
+    nely = int(args["nely"])
+    nelx = int(args["nelx"])
+    mask = (torch.broadcast_to(args["mask"], (nely, nelx)) > 0).cpu().numpy()
 
-    # iterate over the structures and plot different seeds
-    for index, structure_name in enumerate(structures):
-        # Get the designs
-        designs = structure_outputs[index]['designs']
-
-        # Get the losses
-        losses = structure_outputs[index]['losses']
-        losses = pd.DataFrame(losses).ffill()
-        losses = losses.iloc[-1, :]
-        print(f'All losses {losses}')
-        print('\n')
-        print(f'Median loss for {structure_name}; {np.median(losses)}')
-
-        for trial in range(num_trials):
-            ax = axes[index, trial]
-            design = designs[trial, :, :]
-            design = np.hstack((design[:, ::-1], design))
-            im = ax.imshow(design, cmap='jet', aspect='auto', vmin=0, vmax=1)
-            ax.set_xticks([])
-            ax.set_yticks([])
-
-            # Add the ylabel (structure name)
-            if trial == 0:
-                ax.set_ylabel(f'{structure_name}', fontsize=14, weight='bold')
-
-    fig.colorbar(im, ax=axes.ravel().tolist())
-
-    # Also, save fig
-    fig.savefig(
-        f'/home/jusun/dever120/NCVX-Neural-Structural-Optimization/results/{model_size}-pygranso-seed-results.png',  # noqa
-        bbox_inches='tight',
+    # Build the structure with pygranso
+    outputs = train.train_pygranso(
+        problem=problem,
+        device=device,
+        pygranso_combined_function=comb_fn,
+        requires_flip=requires_flip,
+        total_frames=total_frames,
+        cnn_kwargs=cnn_kwargs,
+        num_trials=num_trials,
+        maxit=maxit,
+        include_symmetry=include_symmetry,
     )
 
-    # Save figure to weights and biases
-    wandb.log({'plot': wandb.Image(fig)})
+    # Build the outputs
+    # NTO-PCO
+    pygranso_outputs = build_outputs(
+        problem_name=problem_name,
+        outputs=outputs,
+        mask=mask,
+        volume=volume,
+        requires_flip=requires_flip,
+    )
+
+    # TOuNN Outputs
+    tounn_outputs = tounn_train_and_outputs(problem, requires_flip)
+
+    # Build Google-DIP results - We will use our problem library
+    # so we can also have custom structures not in the
+    # google code
+    google_problem = problem
+
+    # Set to numpy for google framework
+    google_problem.normals = google_problem.normals.cpu().numpy()
+    google_problem.forces = google_problem.forces.cpu().numpy()
+
+    if not isinstance(google_problem.mask, int):
+        google_problem.mask = google_problem.mask.cpu().numpy()
+
+    # Google specific parameters
+    google_problem.mirror_left = True
+    google_problem.mirror_right = False
+
+    # Same interface and usage as Google-DIP code
+    ds = train_all(google_problem, max_iterations)
+
+    # Google-DIP outputs
+    benchmark_outputs = build_google_outputs(
+        problem_name=problem_name,
+        iterations=max_iterations,
+        ds=ds,
+        mask=mask,
+        volume=volume,
+        requires_flip=requires_flip,
+    )
+
+    # Save all outputs
+    # NTO-PCO Outputs
+    pygranso_filepath = os.path.join(save_path, f'{problem_name}-pygranso-cnn.pickle')
+    with open(pygranso_filepath, 'wb') as handle:
+        pickle.dump(pygranso_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # TOuNN Outputs
+    tounn_filepath = os.path.join(save_path, f'{problem_name}-tounn.pickle')
+    with open(tounn_filepath, 'wb') as handle:
+        pickle.dump(tounn_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Google-DIP Outputs
+    google_filepath = os.path.join(save_path, f'{problem_name}-google.pickle')
+    with open(google_filepath, 'wb') as handle:
+        pickle.dump(benchmark_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    print('Run completed! 🎉')
 
 
 if __name__ == "__main__":

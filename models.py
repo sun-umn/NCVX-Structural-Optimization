@@ -29,16 +29,6 @@ def get_seeded_random_variable(latent_size, seed):
     return torch.normal(mean=0.0, std=1.0, size=(3, latent_size))
 
 
-class STEFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input):
-        return (input > 0).float()
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return Fun.hardtanh(grad_output)
-
-
 # Create a custom global normalization layer for pytorch
 class GlobalNormalization(nn.Module):
     """
@@ -65,7 +55,7 @@ class AddOffset(nn.Module):
     trainable for the structural optimization code
     """
 
-    def __init__(self, conv_channels, height, width, scale=10):  # noqa
+    def __init__(self, conv_channels, height, width, scale=10.0):  # noqa
         super().__init__()
         self.scale = torch.tensor(scale, requires_grad=True)
         self.conv_channels = conv_channels
@@ -124,11 +114,8 @@ class CNNModel(nn.Module):
         super().__init__()
         set_seed(random_seed)
 
-        # set Omega for SIREN
-        self.omega_0 = 1.0
-
         # Raise an error if the resizes are not equal to the convolutional
-        # filteres
+        # filters
         if len(resizes) != len(conv_filters):
             raise ValueError("resizes and filters are not the same!")
 
@@ -157,7 +144,7 @@ class CNNModel(nn.Module):
         gain = self.dense_init_scale * np.sqrt(max(filters / latent_size, 1.0))
         nn.init.orthogonal_(self.dense.weight, gain=gain)
 
-        # Create the convoluational layers that will be used
+        # Create the convolutional layers that will be used
         self.conv = nn.ModuleList()
 
         # Global normalization layers
@@ -187,12 +174,6 @@ class CNNModel(nn.Module):
             torch.nn.init.kaiming_normal_(
                 convolution_layer.weight, mode="fan_in", nonlinearity="leaky_relu"
             )
-            # Try SIREN initializers
-            # torch.nn.init.uniform_(
-            #     convolution_layer.weight,
-            #     -np.sqrt(6 / in_channels) / self.omega_0,
-            #     np.sqrt(6 / in_channels) / self.omega_0,
-            # )
 
             torch.nn.init.zeros_(convolution_layer.bias)
             self.conv.append(convolution_layer)
@@ -222,10 +203,7 @@ class CNNModel(nn.Module):
 
         layer_loop = zip(self.resizes, self.conv_filters)
         for idx, (resize, filters) in enumerate(layer_loop):
-            # output = torch.tanh(output)
-
-            output = torch.sin(self.omega_0 * output)
-            # output = torch.nn.Softplus()(output)
+            output = torch.sin(output)
             # After a lot of investigation the outputs of the upsample need
             # to be reconfigured to match the same expectation as tensorflow
             # so we will do that here. Also, interpolate is teh correct

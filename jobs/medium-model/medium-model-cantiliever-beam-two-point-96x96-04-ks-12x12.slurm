@@ -1,7 +1,7 @@
 #!/bin/bash -l
-#SBATCH --time=24:00:00
-#SBATCH --ntasks=16
-#SBATCH --mem=100g
+#SBATCH --time=16:00:00
+#SBATCH --ntasks=8
+#SBATCH --mem=65g
 #SBATCH --tmp=40g
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=dever120@umn.edu
@@ -9,4 +9,4 @@
 #SBATCH --gres=gpu:a100:1
 /home/jusun/dever120/NCVX-Neural-Structural-Optimization
 export PATH=/home/jusun/dever120/miniconda3/envs/rydevera/bin:$PATH
-python -m tasks run-multi-structure-pipeline --model_size='medium' --structure_size='large'
+python -m tasks run-multi-structure-pipeline-v2 --model_size='medium' --problem_name='cantilever_beam_two_point_96x96_0.4' --kernel_size="12,12"
