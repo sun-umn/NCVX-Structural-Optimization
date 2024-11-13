@@ -306,9 +306,10 @@ class MultiMaterialCNNModel(nn.Module):
         dense_channels_tuple = (dense_channels,)
         offset_filters_tuple = conv_filters[:-1]
         offset_filters = dense_channels_tuple + offset_filters_tuple
+        kernel_sizes = [(3, 3), (5, 5), (5, 5), (7, 7), (11, 11)]
 
-        for resize, in_channels, out_channels in zip(
-            self.resizes, offset_filters, conv_filters
+        for resize, in_channels, out_channels, kernel_size in zip(
+            self.resizes, offset_filters, conv_filters, kernel_sizes
         ):
             convolution_layer = nn.Conv2d(
                 in_channels=in_channels,
@@ -339,9 +340,9 @@ class MultiMaterialCNNModel(nn.Module):
         # Set up z here otherwise it is not part of the leaf tensors
         self.z = get_seeded_random_variable(latent_size, random_seed)
         self.z = torch.mean(self.z, axis=0)
+        self.p = nn.Parameter(torch.tensor(2.0))
 
         self.z = nn.Parameter(self.z)
-        self.softplus = nn.Softplus()
 
     def forward(self, x=None):  # noqa
         # Create the model
@@ -351,10 +352,8 @@ class MultiMaterialCNNModel(nn.Module):
         layer_loop = zip(self.resizes, self.conv_filters)
         for idx, (resize, filters) in enumerate(layer_loop):
             output = torch.sin(output)
-            # After a lot of investigation the outputs of the upsample need
-            # to be reconfigured to match the same expectation as tensorflow
-            # so we will do that here. Also, interpolate is teh correct
-            # function to use here
+
+            # Upsample interpolation
             output = Fun.interpolate(
                 output,
                 scale_factor=resize,
@@ -372,8 +371,18 @@ class MultiMaterialCNNModel(nn.Module):
                 output = self.add_offset[idx](output)
 
         # The final output will have num_materials + 1 (void)
-        output = self.softplus(output)
         output = torch.squeeze(output)
+
+        output = output.permute(0, 2, 1).reshape(self.num_materials, -1).t()
+
+        p = torch.maximum(torch.tensor(1.0), self.p)
+        print(self.p, p)
+
+        output = torch.exp(2.0 * output)
+
+        # x_phys = torch.nn.Softplus()(x_phys)
+        normalization = torch.norm(output, p=1, dim=1)
+        output = output / normalization[:, None]
 
         return output
 

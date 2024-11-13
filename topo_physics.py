@@ -20,6 +20,18 @@ def young_modulus(
     return (e_min + x**p * (e_0 - e_min)).to(device=device, dtype=dtype)
 
 
+def young_modulus_multi_material_v2(
+    x, e_materials, e_min, p=3, device=utils.DEFAULT_DEVICE, dtype=utils.DEFAULT_DTYPE
+):
+    """
+    Function that calculates the young modulus for multiple materials
+    """
+    e_materials = e_materials[:, None, None]
+    material_density = e_min + x**p * (e_materials - e_min)
+
+    return material_density.sum(axis=0).to(device=device, dtype=dtype)
+
+
 def young_modulus_multi_material(
     x, e_materials, e_min, p=3, device=utils.DEFAULT_DEVICE, dtype=utils.DEFAULT_DTYPE
 ):
@@ -31,7 +43,11 @@ def young_modulus_multi_material(
 
     # Reshaping for matrix multiplication
     e_materials = e_materials.reshape(num_materials, 1).T
-    young_modulus = (e_materials * penalized_materials).sum(axis=1).flatten()
+    material_density = (e_materials - e_min) * penalized_materials + e_min
+    young_modulus = material_density.sum(axis=1).flatten()
+    # import pdb; pdb.set_trace()
+
+    # young_modulus = (e_materials * penalized_materials).sum(axis=1).flatten()
     return young_modulus.to(device=device, dtype=dtype)
 
 
@@ -144,6 +160,39 @@ def compliance(
     ce = ce.reshape(nelx, nely)
 
     young_x_phys = young_modulus(
+        x_phys, e_0, e_min, p=penal, device=device, dtype=dtype
+    )
+
+    return young_x_phys * ce.t(), None, None
+
+
+def multi_material_compliance_v2(
+    x_phys,
+    u,
+    ke,
+    args,
+    *,
+    penal=3,
+    e_min=1e-9,
+    e_0=1,
+    base="Google",
+    device=utils.DEFAULT_DEVICE,
+    dtype=utils.DEFAULT_DTYPE,
+):
+    """
+    Calculate the compliance objective.
+    NOTE: For our implementation both x_phys and u will require_grad
+    and will both be torch tensors.
+    """
+    nely, nelx = args["nely"], args["nelx"]
+
+    # Updated code
+    edof, x_list, y_list = build_nodes_data(args, base=base)
+    ce = (u[edof] @ ke) * u[edof]
+    ce = torch.sum(ce, 1)
+    ce = ce.reshape(nelx, nely)
+
+    young_x_phys = young_modulus_multi_material_v2(
         x_phys, e_0, e_min, p=penal, device=device, dtype=dtype
     )
 
@@ -373,7 +422,7 @@ def calculate_compliance(model, ke, args, device, dtype):
     return torch.sum(compliance_output), x_phys, mask
 
 
-def calculate_multi_material_compliance(model, ke, args, device, dtype):
+def calculate_multi_material_compliance_v2(model, ke, args, device, dtype):
     """
     Function to calculate the final compliance
     """
@@ -390,34 +439,46 @@ def calculate_multi_material_compliance(model, ke, args, device, dtype):
         dtype=dtype,
     )
 
-    # For now set the mask to None
-    mask = None
+    softmax = nn.Softmax(dim=0)
+    x_phys = softmax(logits)
 
-    # TODO: I do not remember the meaning for this
-    # We turn x_phys into a flattened matrix with
-    # num_materials + 1 columns
-    material_channels = len(args['e_materials'])
-    x_phys = torch.zeros(
-        args['nelx'] * args['nely'],
-        material_channels + 1,
-        device=device,
-        dtype=torch.double,
+    # Calculate the forces
+    forces = calculate_forces(x_phys, args)
+
+    # Calculate the u_matrix
+    u_matrix = sparse_displace(
+        x_phys, ke, args, forces, args["freedofs"], args["fixdofs"], **kwargs
     )
 
-    if np.all(logits.shape != x_phys.shape):
-        softmax = nn.Softmax(dim=0)
-        logits = softmax(logits)
+    # Calculate the compliance output
+    compliance_output, _, _ = multi_material_compliance_v2(
+        x_phys, u_matrix, ke, args, **kwargs
+    )
 
-        # TODO: Why can we not just reshape this?
-        for i in range(material_channels + 1):
-            x_phys[:, i] = logits[i, :, :].T.flatten()
+    # The loss is the sum of the compliance
+    return torch.sum(compliance_output), x_phys, _
 
-    else:
-        softmax = nn.Softmax(dim=1)
-        logits = softmax(logits)
 
-        # NOTE: Case of the MLP
-        x_phys = logits
+def calculate_multi_material_compliance(model, ke, args, device, dtype):
+    """
+    Function to calculate the final compliance
+    """
+    logits = model(None)
+    x_phys = logits.to(dtype=dtype)
+
+    # kwargs for displacement
+    kwargs = dict(
+        penal=args["penal"],
+        e_min=args["young_min"],
+        e_0=args["young"],
+        base="MATLAB",
+        device=device,
+        dtype=dtype,
+    )
+    # print(kwargs)
+
+    # For now set the mask to None
+    mask = None
 
     # Need to compute a stiffness matrix
     stiffness = young_modulus_multi_material(

@@ -1,0 +1,53 @@
+wandb_version: 1
+
+latent_size:
+  desc: null
+  value: 96
+dense_channels:
+  desc: null
+  value: 24
+conv_filters:
+  desc: null
+  value:
+  - 85
+  - 42
+  - 21
+  - 10
+  - 5
+kernel_size:
+  desc: null
+  value: 11,11
+_wandb:
+  desc: null
+  value:
+    python_version: 3.9.16
+    cli_version: 0.16.2
+    framework: torch
+    is_jupyter_run: true
+    is_kaggle_kernel: false
+    start_time: 1731339562.300013
+    t:
+      1:
+      - 1
+      - 2
+      - 3
+      - 12
+      - 54
+      - 55
+      2:
+      - 1
+      - 2
+      - 3
+      - 12
+      - 54
+      - 55
+      3:
+      - 15
+      - 16
+      - 23
+      4: 3.9.16
+      5: 0.16.2
+      8:
+      - 1
+      - 5
+      13: linux-x86_64

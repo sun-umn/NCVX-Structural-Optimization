@@ -1,0 +1,93 @@
+The directory /home/jusun/dever120/NCVX-Neural-Structural-Optimization/results/07hlthph was created.
+Building structure: mbb_beam_96x32_0.5
+
+
+[33m╔═════ QP SOLVER NOTICE ════════════════════════════════════════════════════════════════════════╗
+[0m[33m║  PyGRANSO requires a quadratic program (QP) solver that has a quadprog-compatible interface,  ║
+[0m[33m║  the default is osqp. Users may provide their own wrapper for the QP solver.                  ║
+[0m[33m║  To disable this notice, set opts.quadprog_info_msg = False                                   ║
+[0m[33m╚═══════════════════════════════════════════════════════════════════════════════════════════════╝
+[0m═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+PyGRANSO: A PyTorch-enabled port of GRANSO with auto-differentiation                                             ║
+Version 1.2.0                                                                                                    ║
+Licensed under the AGPLv3, Copyright (C) 2021-2022 Tim Mitchell and Buyun Liang                                  ║
+═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+Problem specifications:                                                                                          ║
+ # of variables                     :   685308                                                                   ║
+ # of inequality constraints        :        0                                                                   ║
+ # of equality constraints          :        2                                                                   ║
+═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+[33mLimited-memory mode enabled with size = 20.                                                                     [0m ║
+[33mNOTE: limited-memory mode is generally NOT                                                                      [0m ║
+[33mrecommended for nonsmooth problems.                                                                             [0m ║
+═════╦═══════════════════════════╦════════════════╦═════════════════╦═══════════════════════╦════════════════════╣
+     ║ <--- Penalty Function --> ║                ║ Total Violation ║ <--- Line Search ---> ║ <- Stationarity -> ║
+Iter ║    Mu    │      Value     ║    Objective   ║ Ineq │    Eq    ║ SD │ Evals │     t    ║ Grads │    Value   ║
+═════╬═══════════════════════════╬════════════════╬═════════════════╬═══════════════════════╬════════════════════╣
+   0 ║ 1.000000 │  1.29462036576 ║  0.99979198545 ║   -  │ 0.224432 ║ -  │     1 │ 0.000000 ║     1 │ 0.543725   ║
+  20 ║ 0.348678 │  0.08734533488 ║  0.13915994806 ║   -  │ 0.034418 ║ S  │     3 │ 0.250000 ║     1 │ 0.024072   ║
+  40 ║ 0.348678 │  0.05915773282 ║  0.12884323262 ║   -  │ 0.013195 ║ S  │     4 │ 0.125000 ║     1 │ 0.001876   ║
+  60 ║ 0.348678 │  0.05347964859 ║  0.12683909898 ║   -  │ 0.008962 ║ S  │     3 │ 0.250000 ║     1 │ 0.016314   ║
+  80 ║ 0.348678 │  0.05080854247 ║  0.12625081534 ║   -  │ 0.006756 ║ S  │     6 │ 0.031250 ║     1 │ 7.42e-04   ║
+ 100 ║ 0.348678 │  0.04969453173 ║  0.12605938361 ║   -  │ 0.005677 ║ S  │     2 │ 0.500000 ║     1 │ 0.007555   ║
+ 120 ║ 0.348678 │  0.04870524896 ║  0.12585169671 ║   -  │ 0.004818 ║ S  │     7 │ 0.046875 ║     1 │ 0.001908   ║
+ 140 ║ 0.348678 │  0.04779264844 ║  0.12572755198 ║   -  │ 0.003826 ║ S  │     4 │ 0.125000 ║     1 │ 0.030691   ║
+ 160 ║ 0.348678 │  0.04690723534 ║  0.12558653505 ║   -  │ 0.003104 ║ S  │     2 │ 0.500000 ║     1 │ 0.003590   ║
+ 180 ║ 0.348678 │  0.04584301339 ║  0.12539207114 ║   -  │ 0.002101 ║ S  │     4 │ 0.125000 ║     1 │ 0.009688   ║
+ 200 ║ 0.348678 │  0.04506527772 ║  0.12526925584 ║   -  │ 0.001378 ║ S  │     3 │ 0.250000 ║     1 │ 0.001520   ║
+ 220 ║ 0.348678 │  0.04445782404 ║  0.12515380563 ║   -  │ 8.16e-04 ║ S  │     1 │ 1.000000 ║     1 │ 1.45e-04   ║
+ 240 ║ 0.348678 │  0.04400748690 ║  0.12508605301 ║   -  │ 3.88e-04 ║ S  │     4 │ 0.125000 ║     1 │ 0.001544   ║
+ 260 ║ 0.348678 │  0.04368689434 ║  0.12502364546 ║   -  │ 7.61e-05 ║ S  │     2 │ 0.500000 ║     1 │ 8.03e-05   ║
+ 280 ║ 0.254187 │  0.03176973305 ║  0.12498246252 ║   -  │ 6.83e-07 ║ S  │     2 │ 0.500000 ║     1 │ 0.001454   ║
+ 300 ║ 0.150095 │  0.01875724008 ║  0.12496882046 ║   -  │ 9.02e-08 ║ S  │     3 │ 0.250000 ║     1 │ 5.53e-05   ║
+ 320 ║ 0.064611 │  0.00807403217 ║  0.12496266042 ║   -  │ 5.96e-08 ║ S  │    11 │ 9.77e-04 ║     2 │ 1.47e-05   ║
+ 340 ║ 0.011973 │  0.00149608980 ║  0.12495986114 ║   -  │ 3.66e-09 ║ S  │     7 │ 0.015625 ║     2 │ 3.14e-06   ║
+═════╩═══════════════════════════╩════════════════╩═════════════════╩═══════════════════════╩════════════════════╣
+F = final iterate, B = Best (to tolerance), MF = Most Feasible                                                   ║
+Optimization results:                                                                                            ║
+═════╦═══════════════════════════╦════════════════╦═════════════════╦═══════════════════════╦════════════════════╣
+   F ║          │                ║  0.12495986000 ║   -  │ 2.81e-09 ║    │       │          ║       │            ║
+   B ║          │                ║  0.12495946285 ║   -  │ 6.03e-08 ║    │       │          ║       │            ║
+  MF ║          │                ║  0.12495986055 ║   -  │ 1.99e-09 ║    │       │          ║       │            ║
+═════╩═══════════════════════════╩════════════════╩═════════════════╩═══════════════════════╩════════════════════╣
+Iterations:              341                                                                                     ║
+Function evaluations:    1286                                                                                    ║
+PyGRANSO termination code: 0 --- converged to stationarity and feasibility tolerances.                           ║
+═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/tasks.py", line 1127, in <module>
+    cli()
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1130, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1055, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1657, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1404, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 760, in invoke
+    return __callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/tasks.py", line 1076, in run_multi_structure_pipeline
+    tounn_outputs = tounn_train_and_outputs(problem, requires_flip)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/tasks.py", line 428, in tounn_train_and_outputs
+    topOpt.optimizeDesign(maxEpochs, minEpochs, useSavedNet)
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/TOuNN/TOuNN.py", line 281, in optimizeDesign
+    u, Jelem = self.FE.solve88(rho_np)
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/TOuNN/FE.py", line 115, in solve88
+    K = cvxopt.spmatrix(K.data, K.row.astype(np.int), K.col.astype(np.int))
+                                             ^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/numpy/__init__.py", line 324, in __getattr__
+    raise AttributeError(__former_attrs__[attr])
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations

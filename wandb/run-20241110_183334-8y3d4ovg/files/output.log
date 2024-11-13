@@ -1,0 +1,172 @@
+The directory /home/jusun/dever120/NCVX-Neural-Structural-Optimization/results/8y3d4ovg was created.
+Building structure: mbb_beam_96x32_0.5
+
+
+[33m╔═════ QP SOLVER NOTICE ════════════════════════════════════════════════════════════════════════╗
+[0m[33m║  PyGRANSO requires a quadratic program (QP) solver that has a quadprog-compatible interface,  ║
+[0m[33m║  the default is osqp. Users may provide their own wrapper for the QP solver.                  ║
+[0m[33m║  To disable this notice, set opts.quadprog_info_msg = False                                   ║
+[0m[33m╚═══════════════════════════════════════════════════════════════════════════════════════════════╝
+[0m═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+PyGRANSO: A PyTorch-enabled port of GRANSO with auto-differentiation                                             ║
+Version 1.2.0                                                                                                    ║
+Licensed under the AGPLv3, Copyright (C) 2021-2022 Tim Mitchell and Buyun Liang                                  ║
+═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+Problem specifications:                                                                                          ║
+ # of variables                     :   685308                                                                   ║
+ # of inequality constraints        :        0                                                                   ║
+ # of equality constraints          :        2                                                                   ║
+═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+[33mLimited-memory mode enabled with size = 20.                                                                     [0m ║
+[33mNOTE: limited-memory mode is generally NOT                                                                      [0m ║
+[33mrecommended for nonsmooth problems.                                                                             [0m ║
+═════╦═══════════════════════════╦════════════════╦═════════════════╦═══════════════════════╦════════════════════╣
+     ║ <--- Penalty Function --> ║                ║ Total Violation ║ <--- Line Search ---> ║ <- Stationarity -> ║
+Iter ║    Mu    │      Value     ║    Objective   ║ Ineq │    Eq    ║ SD │ Evals │     t    ║ Grads │    Value   ║
+═════╬═══════════════════════════╬════════════════╬═════════════════╬═══════════════════════╬════════════════════╣
+   0 ║ 1.000000 │  1.29462036576 ║  0.99979198545 ║   -  │ 0.224432 ║ -  │     1 │ 0.000000 ║     1 │ 0.543725   ║
+  20 ║ 0.348678 │  0.08734524491 ║  0.13915995036 ║   -  │ 0.034418 ║ S  │     3 │ 0.250000 ║     1 │ 0.024072   ║
+  40 ║ 0.348678 │  0.05884947891 ║  0.12872984071 ║   -  │ 0.012971 ║ S  │     3 │ 0.250000 ║     1 │ 0.002949   ║
+  60 ║ 0.348678 │  0.05296923032 ║  0.12665453594 ║   -  │ 0.008665 ║ S  │     7 │ 0.015625 ║     1 │ 0.015575   ║
+  80 ║ 0.348678 │  0.05015266446 ║  0.12600372663 ║   -  │ 0.006090 ║ S  │     2 │ 0.500000 ║     1 │ 0.004812   ║
+ 100 ║ 0.348678 │  0.04830134334 ║  0.12580933614 ║   -  │ 0.004370 ║ S  │     6 │ 0.031250 ║     1 │ 0.007017   ║
+ 120 ║ 0.348678 │  0.04719983686 ║  0.12558238130 ║   -  │ 0.003388 ║ S  │     6 │ 0.031250 ║     1 │ 0.012533   ║
+ 140 ║ 0.348678 │  0.04632457086 ║  0.12536835783 ║   -  │ 0.002562 ║ S  │     9 │ 0.003906 ║     1 │ 0.011910   ║
+ 160 ║ 0.348678 │  0.04535727360 ║  0.12516689917 ║   -  │ 0.001664 ║ S  │     6 │ 0.031250 ║     1 │ 0.002826   ║
+ 180 ║ 0.348678 │  0.04471173357 ║  0.12511277122 ║   -  │ 0.001076 ║ S  │     5 │ 0.187500 ║     1 │ 0.012462   ║
+ 200 ║ 0.348678 │  0.04429818104 ║  0.12501885150 ║   -  │ 6.41e-04 ║ S  │     3 │ 0.250000 ║     1 │ 6.13e-05   ║
+ 220 ║ 0.348678 │  0.04395777649 ║  0.12497072124 ║   -  │ 3.27e-04 ║ S  │     2 │ 0.500000 ║     1 │ 5.09e-04   ║
+ 240 ║ 0.348678 │  0.04361470954 ║  0.12491428639 ║   -  │ 5.85e-05 ║ S  │     3 │ 0.250000 ║     1 │ 4.71e-04   ║
+ 260 ║ 0.121577 │  0.01518090858 ║  0.12486323602 ║   -  │ 4.49e-07 ║ S  │     2 │ 0.500000 ║     1 │ 6.75e-06   ║
+ 280 ║ 0.079766 │  0.00995861559 ║  0.12484553608 ║   -  │ 8.05e-08 ║ S  │     6 │ 0.031250 ║     3 │ 1.62e-06   ║
+ 300 ║ 0.025032 │  0.00312494396 ║  0.12483918471 ║   -  │ 1.40e-08 ║ S  │     1 │ 1.000000 ║     1 │ 3.77e-06   ║
+═════╩═══════════════════════════╩════════════════╩═════════════════╩═══════════════════════╩════════════════════╣
+Optimization results:                                                                                            ║
+F = final iterate, B = Best (to tolerance), MF = Most Feasible                                                   ║
+═════╦═══════════════════════════╦════════════════╦═════════════════╦═══════════════════════╦════════════════════╣
+   F ║          │                ║  0.12483711760 ║   -  │ 1.41e-10 ║    │       │          ║       │            ║
+   B ║          │                ║  0.12483671167 ║   -  │ 6.08e-08 ║    │       │          ║       │            ║
+  MF ║          │                ║  0.12483711760 ║   -  │ 1.41e-10 ║    │       │          ║       │            ║
+═════╩═══════════════════════════╩════════════════╩═════════════════╩═══════════════════════╩════════════════════╣
+Iterations:              313                                                                                     ║
+Function evaluations:    1199                                                                                    ║
+PyGRANSO termination code: 0 --- converged to stationarity and feasibility tolerances.                           ║
+═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+  0 J: 271.91; Vf: 0.690; loss: 1.007; relGreyElems: 1.000
+ 20 J: 171.79; Vf: 0.646; loss: 0.721; relGreyElems: 1.000
+ 40 J: 191.24; Vf: 0.597; loss: 0.781; relGreyElems: 1.000
+ 60 J: 193.70; Vf: 0.591; loss: 0.813; relGreyElems: 1.000
+ 80 J: 198.35; Vf: 0.562; loss: 0.791; relGreyElems: 1.000
+100 J: 193.29; Vf: 0.541; loss: 0.745; relGreyElems: 1.000
+120 J: 180.67; Vf: 0.525; loss: 0.680; relGreyElems: 1.000
+140 J: 173.51; Vf: 0.522; loss: 0.652; relGreyElems: 0.077
+160 J: 174.07; Vf: 0.516; loss: 0.649; relGreyElems: 0.058
+180 J: 171.79; Vf: 0.512; loss: 0.637; relGreyElems: 0.040
+200 J: 170.79; Vf: 0.513; loss: 0.635; relGreyElems: 0.035
+220 J: 173.44; Vf: 0.506; loss: 0.639; relGreyElems: 0.033
+240 J: 171.56; Vf: 0.511; loss: 0.637; relGreyElems: 0.042
+260 J: 173.42; Vf: 0.506; loss: 0.640; relGreyElems: 0.036
+280 J: 171.42; Vf: 0.512; loss: 0.639; relGreyElems: 0.032
+300 J: 171.65; Vf: 0.508; loss: 0.635; relGreyElems: 0.026
+320 J: 172.11; Vf: 0.505; loss: 0.634; relGreyElems: 0.021
+340 J: 170.78; Vf: 0.514; loss: 0.642; relGreyElems: 0.025
+360 J: 175.91; Vf: 0.501; loss: 0.647; relGreyElems: 0.030
+380 J: 171.61; Vf: 0.507; loss: 0.635; relGreyElems: 0.020
+400 J: 174.11; Vf: 0.504; loss: 0.641; relGreyElems: 0.023
+420 J: 173.15; Vf: 0.511; loss: 0.646; relGreyElems: 0.027
+440 J: 171.58; Vf: 0.508; loss: 0.636; relGreyElems: 0.017
+460 J: 172.35; Vf: 0.503; loss: 0.634; relGreyElems: 0.018
+480 J: 174.36; Vf: 0.498; loss: 0.642; relGreyElems: 0.025
+500 J: 179.80; Vf: 0.497; loss: 0.662; relGreyElems: 0.019
+520 J: 173.38; Vf: 0.508; loss: 0.644; relGreyElems: 0.022
+540 J: 170.13; Vf: 0.510; loss: 0.636; relGreyElems: 0.018
+560 J: 171.23; Vf: 0.504; loss: 0.632; relGreyElems: 0.014
+580 J: 174.49; Vf: 0.500; loss: 0.642; relGreyElems: 0.013
+600 J: 177.91; Vf: 0.499; loss: 0.655; relGreyElems: 0.023
+620 J: 174.78; Vf: 0.503; loss: 0.644; relGreyElems: 0.018
+640 J: 173.29; Vf: 0.514; loss: 0.664; relGreyElems: 0.014
+660 J: 175.85; Vf: 0.500; loss: 0.647; relGreyElems: 0.021
+680 J: 189.94; Vf: 0.509; loss: 0.709; relGreyElems: 0.022
+700 J: 177.29; Vf: 0.511; loss: 0.668; relGreyElems: 0.018
+720 J: 174.27; Vf: 0.506; loss: 0.647; relGreyElems: 0.018
+740 J: 174.85; Vf: 0.505; loss: 0.647; relGreyElems: 0.020
+760 J: 173.72; Vf: 0.502; loss: 0.640; relGreyElems: 0.021
+780 J: 175.17; Vf: 0.500; loss: 0.644; relGreyElems: 0.017
+800 J: 171.03; Vf: 0.509; loss: 0.641; relGreyElems: 0.017
+820 J: 179.05; Vf: 0.497; loss: 0.660; relGreyElems: 0.018
+840 J: 173.31; Vf: 0.505; loss: 0.642; relGreyElems: 0.015
+860 J: 177.25; Vf: 0.501; loss: 0.652; relGreyElems: 0.015
+880 J: 172.51; Vf: 0.501; loss: 0.635; relGreyElems: 0.010
+900 J: 175.04; Vf: 0.502; loss: 0.644; relGreyElems: 0.014
+920 J: 173.73; Vf: 0.502; loss: 0.640; relGreyElems: 0.011
+940 J: 171.87; Vf: 0.508; loss: 0.646; relGreyElems: 0.015
+960 J: 173.12; Vf: 0.507; loss: 0.645; relGreyElems: 0.013
+980 J: 171.76; Vf: 0.505; loss: 0.637; relGreyElems: 0.016
+1000 J: 172.25; Vf: 0.503; loss: 0.636; relGreyElems: 0.014
+1020 J: 178.98; Vf: 0.500; loss: 0.658; relGreyElems: 0.016
+1040 J: 181.33; Vf: 0.504; loss: 0.670; relGreyElems: 0.012
+1060 J: 174.60; Vf: 0.499; loss: 0.642; relGreyElems: 0.016
+1080 J: 173.57; Vf: 0.497; loss: 0.640; relGreyElems: 0.011
+1100 J: 172.32; Vf: 0.504; loss: 0.637; relGreyElems: 0.012
+1120 J: 172.13; Vf: 0.506; loss: 0.641; relGreyElems: 0.010
+1140 J: 174.85; Vf: 0.503; loss: 0.645; relGreyElems: 0.012
+1160 J: 171.94; Vf: 0.503; loss: 0.634; relGreyElems: 0.012
+1180 J: 171.47; Vf: 0.505; loss: 0.636; relGreyElems: 0.011
+1200 J: 171.14; Vf: 0.504; loss: 0.633; relGreyElems: 0.010
+1220 J: 172.80; Vf: 0.503; loss: 0.637; relGreyElems: 0.010
+1240 J: 171.77; Vf: 0.506; loss: 0.639; relGreyElems: 0.010
+1260 J: 173.15; Vf: 0.501; loss: 0.637; relGreyElems: 0.009
+1280 J: 173.22; Vf: 0.503; loss: 0.639; relGreyElems: 0.009
+1300 J: 173.09; Vf: 0.504; loss: 0.639; relGreyElems: 0.009
+1320 J: 171.42; Vf: 0.505; loss: 0.636; relGreyElems: 0.011
+1340 J: 173.85; Vf: 0.497; loss: 0.641; relGreyElems: 0.010
+1360 J: 173.15; Vf: 0.503; loss: 0.639; relGreyElems: 0.010
+1380 J: 174.75; Vf: 0.496; loss: 0.645; relGreyElems: 0.008
+1400 J: 174.32; Vf: 0.497; loss: 0.643; relGreyElems: 0.008
+1420 J: 177.37; Vf: 0.498; loss: 0.653; relGreyElems: 0.015
+1440 J: 172.32; Vf: 0.502; loss: 0.634; relGreyElems: 0.007
+1460 J: 172.36; Vf: 0.500; loss: 0.634; relGreyElems: 0.012
+1480 J: 174.97; Vf: 0.499; loss: 0.644; relGreyElems: 0.007
+1499 J: 174.88; Vf: 0.501; loss: 0.643; relGreyElems: 0.015
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/tasks.py", line 1127, in <module>
+    cli()
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1130, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1055, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1657, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 1404, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/click/core.py", line 760, in invoke
+    return __callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/tasks.py", line 1095, in run_multi_structure_pipeline
+    ds = train_all(google_problem, max_iterations)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/NCVX-Neural-Structural-Optimization/tasks.py", line 345, in train_all
+    ds_mma = google_train.method_of_moving_asymptotes(model, max_iterations)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/neural_structural_optimization/train.py", line 150, in method_of_moving_asymptotes
+    x0 = _get_variables(model.trainable_variables).astype(np.float64)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/neural_structural_optimization/train.py", line 89, in _get_variables
+    return np.concatenate([
+           ^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/autograd/numpy/numpy_wrapper.py", line 38, in <lambda>
+    concatenate = lambda arr_list, axis=0 : concatenate_args(axis, *arr_list)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/autograd/tracer.py", line 48, in f_wrapped
+    return f_raw(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/5/dever120/.conda/envs/general/lib/python3.11/site-packages/autograd/numpy/numpy_wrapper.py", line 37, in concatenate_args
+    return _np.concatenate(args, axis).view(ndarray)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: need at least one array to concatenate

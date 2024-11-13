@@ -10,7 +10,6 @@ import click
 import numpy as np
 import pandas as pd
 import torch
-import wandb
 import xarray
 from neural_structural_optimization import models as google_models
 from neural_structural_optimization import topo_api as google_topo_api
@@ -24,6 +23,7 @@ import topo_api
 import topo_physics
 import train
 import utils
+import wandb
 from MMTOuNN.neuralTO_MM import TopologyOptimizer as MMTO
 from TOuNN.TOuNN import TopologyOptimizer
 
@@ -348,6 +348,10 @@ def train_all(problem, max_iterations, cnn_kwargs=None):
     ds_cnn = google_train.train_lbfgs(model, max_iterations)
 
     dims = pd.Index(["cnn-lbfgs", "mma"], name="model")
+
+    import pbd
+
+    pdb.set_trace()
     return xarray.concat([ds_cnn, ds_mma], dim=dims)
 
 
@@ -854,10 +858,12 @@ def run_multi_material_pipeline(problem_name):
         # Calculate the initial compliance
         model.eval()
         with torch.no_grad():
-            initial_compliance, x_phys, _ = (
-                topo_physics.calculate_multi_material_compliance(
-                    model, ke, args, device, torch.double
-                )
+            (
+                initial_compliance,
+                x_phys,
+                _,
+            ) = topo_physics.calculate_multi_material_compliance(
+                model, ke, args, device, torch.double
             )
 
         # Detach calculation and use it for scaling in PyGranso
@@ -953,11 +959,11 @@ def run_multi_material_pipeline(problem_name):
     print('Multi-Material Pipeline Completed! 🏆')
 
 
-@cli.command('run-multi-structure-pipeline-v2')
-@click.option('--model_size', default='medium')
-@click.option('--problem_name', default='mbb_beam_96x32_0.5')
-@click.option('--kernel_size', default="12,12")
-@click.option('--num_trials', default=1)
+# @cli.command('run-multi-structure-pipeline-v2')
+# @click.option('--model_size', default='medium')
+# @click.option('--problem_name', default='mbb_beam_96x32_0.5')
+# @click.option('--kernel_size', default="12,12")
+# @click.option('--num_trials', default=1)
 def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_trials):
     """
     Task that will build out multiple structures and compare
@@ -1049,31 +1055,31 @@ def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_tria
     nelx = int(args["nelx"])
     mask = (torch.broadcast_to(args["mask"], (nely, nelx)) > 0).cpu().numpy()
 
-    # Build the structure with pygranso
-    outputs = train.train_pygranso(
-        problem=problem,
-        device=device,
-        pygranso_combined_function=comb_fn,
-        requires_flip=requires_flip,
-        total_frames=total_frames,
-        cnn_kwargs=cnn_kwargs,
-        num_trials=num_trials,
-        maxit=maxit,
-        include_symmetry=include_symmetry,
-    )
+    # # Build the structure with pygranso
+    # outputs = train.train_pygranso(
+    #     problem=problem,
+    #     device=device,
+    #     pygranso_combined_function=comb_fn,
+    #     requires_flip=requires_flip,
+    #     total_frames=total_frames,
+    #     cnn_kwargs=cnn_kwargs,
+    #     num_trials=num_trials,
+    #     maxit=maxit,
+    #     include_symmetry=include_symmetry,
+    # )
 
-    # Build the outputs
-    # NTO-PCO
-    pygranso_outputs = build_outputs(
-        problem_name=problem_name,
-        outputs=outputs,
-        mask=mask,
-        volume=volume,
-        requires_flip=requires_flip,
-    )
+    # # Build the outputs
+    # # NTO-PCO
+    # pygranso_outputs = build_outputs(
+    #     problem_name=problem_name,
+    #     outputs=outputs,
+    #     mask=mask,
+    #     volume=volume,
+    #     requires_flip=requires_flip,
+    # )
 
-    # TOuNN Outputs
-    tounn_outputs = tounn_train_and_outputs(problem, requires_flip)
+    # # TOuNN Outputs
+    # tounn_outputs = tounn_train_and_outputs(problem, requires_flip)
 
     # Build Google-DIP results - We will use our problem library
     # so we can also have custom structures not in the
@@ -1104,21 +1110,21 @@ def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_tria
         requires_flip=requires_flip,
     )
 
-    # Save all outputs
-    # NTO-PCO Outputs
-    pygranso_filepath = os.path.join(save_path, f'{problem_name}-pygranso-cnn.pickle')
-    with open(pygranso_filepath, 'wb') as handle:
-        pickle.dump(pygranso_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # # Save all outputs
+    # # NTO-PCO Outputs
+    # pygranso_filepath = os.path.join(save_path, f'{problem_name}-pygranso-cnn.pickle')
+    # with open(pygranso_filepath, 'wb') as handle:
+    #     pickle.dump(pygranso_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # TOuNN Outputs
-    tounn_filepath = os.path.join(save_path, f'{problem_name}-tounn.pickle')
-    with open(tounn_filepath, 'wb') as handle:
-        pickle.dump(tounn_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # # TOuNN Outputs
+    # tounn_filepath = os.path.join(save_path, f'{problem_name}-tounn.pickle')
+    # with open(tounn_filepath, 'wb') as handle:
+    #     pickle.dump(tounn_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # Google-DIP Outputs
-    google_filepath = os.path.join(save_path, f'{problem_name}-google.pickle')
-    with open(google_filepath, 'wb') as handle:
-        pickle.dump(benchmark_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # # Google-DIP Outputs
+    # google_filepath = os.path.join(save_path, f'{problem_name}-google.pickle')
+    # with open(google_filepath, 'wb') as handle:
+    #     pickle.dump(benchmark_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     print('Run completed! 🎉')
 

@@ -1,0 +1,11 @@
+{"time":"2024-11-10T19:09:21.217860047-06:00","level":"INFO","msg":"using version","core version":"0.18.6"}
+{"time":"2024-11-10T19:09:21.217875867-06:00","level":"INFO","msg":"created symlink","path":"/users/5/dever120/NCVX-Neural-Structural-Optimization/wandb/run-20241110_190921-14iqk4u6/logs/debug-core.log"}
+{"time":"2024-11-10T19:09:21.465910941-06:00","level":"INFO","msg":"created new stream","id":"14iqk4u6"}
+{"time":"2024-11-10T19:09:21.465936188-06:00","level":"INFO","msg":"stream: started","id":"14iqk4u6"}
+{"time":"2024-11-10T19:09:21.465944273-06:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"14iqk4u6"}}
+{"time":"2024-11-10T19:09:21.466004686-06:00","level":"INFO","msg":"sender: started","stream_id":"14iqk4u6"}
+{"time":"2024-11-10T19:09:21.466141944-06:00","level":"INFO","msg":"handler: started","stream_id":{"value":"14iqk4u6"}}
+{"time":"2024-11-10T19:09:21.736631832-06:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-10T19:09:31.690022008-06:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2024-11-10T19:09:36.959193481-06:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2024-11-10T19:13:18.220367708-06:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/rydevera-umn/Topology-Optimization/14iqk4u6/file_stream\": dial tcp 35.186.228.49:443: connect: connection timed out"}

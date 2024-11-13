@@ -26,9 +26,13 @@ def multi_material_constraint_function(
     Function to implement MMTO constraints for our framework
     """
     model.eval()
-    unscaled_compliance, x_phys, mask = (
-        topo_physics.calculate_multi_material_compliance(model, ke, args, device, dtype)
-    )
+
+    # TODO: Changing to V2
+    (
+        unscaled_compliance,
+        x_phys,
+        mask,
+    ) = topo_physics.calculate_multi_material_compliance(model, ke, args, device, dtype)
 
     model.train()
     f = 1.0 / initial_compliance * unscaled_compliance
@@ -45,25 +49,26 @@ def multi_material_constraint_function(
         * args['combined_frac']
     )
     # Pixel total here will be the number of rows
-    pixel_total = x_phys.shape[0]
+    # pixel_total = x_phys.shape[0]
+    pixel_total = x_phys.numel()
 
     mass_constraint = torch.zeros(num_materials)
     for index, density_weight in enumerate(args['material_density_weight']):
         mass_constraint[index] = density_weight * torch.sum(x_phys[:, index + 1])
 
+    # for index, density_weight in enumerate(args['material_density_weight']):
+    #     mass_constraint[index] = density_weight * torch.sum(x_phys[index + 1, :, :])
+
     c1 = (torch.sum(mass_constraint) / total_mass) - 1.0
     ce.c1 = c1  # noqa
 
-    # For MMTO we are finding that a two-stage process works very well
-    if add_constraints:
-        # Directly binary constraint
-        binary_constraint = x_phys * (1 - x_phys)
-        binary_constraint = torch.norm(binary_constraint, p=1) / pixel_total
-        ce.c2 = binary_constraint
+    # TODO: Remove? if add_constraints:
+    # Directly binary constraint
+    binary_constraint = x_phys * (1 - x_phys)
+    c2 = torch.norm(binary_constraint, p=1) / pixel_total
+    ce.c2 = c2
 
-        # Sparsity constraint - Do not need sparsity constraint for now
-        # sparsity_constraint = ((x_phys**2).sum(axis=1).sum() / pixel_total) - 1.0
-        # ce.c3 = sparsity_constraint
+    print(unscaled_compliance.item(), c1.item(), c2.item())
 
     # Let's try and clear as much stuff as we can to preserve memory
     del x_phys, mask, ke
