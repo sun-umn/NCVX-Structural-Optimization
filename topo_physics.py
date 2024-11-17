@@ -2,7 +2,6 @@
 import numpy as np
 import scipy
 import torch
-import torch.nn as nn
 
 # first party
 import utils
@@ -336,7 +335,9 @@ def multi_material_sparse_displace_v2(
     """
     Function that displaces the load x using finite element techniques.
     """
-    stiffness = young_modulus_multi_material_v2(x_phys, e_0, e_min, p=penal, device=device, dtype=dtype)
+    stiffness = young_modulus_multi_material_v2(
+        x_phys, e_0, e_min, p=penal, device=device, dtype=dtype
+    )
 
     # Get the K values
     k_entries, k_ylist, k_xlist = get_k_data(stiffness, ke, args, base=base)

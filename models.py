@@ -331,7 +331,8 @@ class MultiMaterialCNNModel(nn.Module):
             #     mode="fan_in",
             #     nonlinearity="leaky_relu",
             # )
-            # torch.nn.init.zeros_(convolution_layer.bias)
+
+            torch.nn.init.zeros_(convolution_layer.bias)
             self.conv.append(convolution_layer)
             self.global_normalization.append(GlobalNormalization())
 

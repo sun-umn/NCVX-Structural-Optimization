@@ -79,9 +79,11 @@ def multi_material_mbb_beam(
     freedofs = np.sort(list(set(alldofs) - set(fixdofs)))
 
     # Variables that will utilize GPU calculations
-    mask = torch.tensor(1.0).to(device=device, dtype=dtype)
-    freedofs = torch.tensor(freedofs).to(device=device, dtype=torch.long)
-    fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)
+    # mask = torch.tensor(1.0).to(device=device, dtype=dtype)
+    freedofs = torch.tensor(freedofs).to(  # type: ignore
+        device=device, dtype=torch.long
+    )
+    fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)  # type: ignore
 
     params = {
         # material properties
@@ -138,9 +140,11 @@ def multi_material_suspended_bridge(
     freedofs = np.sort(list(set(alldofs) - set(fixdofs)))
 
     # Variables that will utilize GPU calculations
-    mask = torch.tensor(1.0).to(device=device, dtype=dtype)
-    freedofs = torch.tensor(freedofs).to(device=device, dtype=torch.long)
-    fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)
+    # mask = torch.tensor(1.0).to(device=device, dtype=dtype)
+    freedofs = torch.tensor(freedofs).to(  # type: ignore
+        device=device, dtype=torch.long
+    )
+    fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)  # type: ignore
 
     params = {
         # material properties
