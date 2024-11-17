@@ -318,6 +318,74 @@ def sparse_displace(
     return u_values
 
 
+def multi_material_sparse_displace_v2(
+    x_phys,
+    ke,
+    args,
+    forces,
+    freedofs,
+    fixdofs,
+    *,
+    penal=3,
+    e_min=1e-9,
+    e_0=1,
+    base="Google",
+    device=utils.DEFAULT_DEVICE,
+    dtype=utils.DEFAULT_DTYPE,
+):
+    """
+    Function that displaces the load x using finite element techniques.
+    """
+    stiffness = young_modulus_multi_material_v2(x_phys, e_0, e_min, p=penal, device=device, dtype=dtype)
+
+    # Get the K values
+    k_entries, k_ylist, k_xlist = get_k_data(stiffness, ke, args, base=base)
+    k_ylist = k_ylist.to(device=device, dtype=dtype)
+    k_xlist = k_xlist.to(device=device, dtype=dtype)
+
+    index_map, keep, indices = utils._get_dof_indices(
+        freedofs,
+        fixdofs,
+        k_ylist,
+        k_xlist,
+        k_entries,
+    )
+
+    # Reduced forces
+    freedofs_forces = forces[freedofs].double().to(device=device, dtype=dtype)
+    size = freedofs_forces.cpu().numpy().size
+
+    # Require gradient on the forces
+    freedofs_forces = freedofs_forces.requires_grad_()
+
+    # Calculate u_nonzero
+    keep_k_entries = k_entries[keep]
+
+    # Build the sparse matrix
+    K = torch.sparse_coo_tensor(indices, keep_k_entries, [size, size]).to(
+        device=device, dtype=dtype
+    )
+
+    # Symmetric indices
+    keep_k_entries = K.coalesce().values()
+    indices = K.coalesce().indices()
+
+    # Compute the u_matrix values
+    u_nonzero = utils.solve_coo(
+        keep_k_entries,
+        indices,
+        freedofs_forces,
+        sym_pos=True,
+        device=device,
+        dtype=dtype,
+    )
+    fixdofs_zeros = torch.zeros(len(fixdofs)).to(device=device, dtype=dtype)
+    u_values = torch.cat((u_nonzero, fixdofs_zeros))
+    u_values = u_values[index_map].to(device=device, dtype=dtype)
+
+    return u_values
+
+
 def multi_material_sparse_displace(
     x_phys,
     ke,
@@ -427,7 +495,7 @@ def calculate_multi_material_compliance_v2(model, ke, args, device, dtype):
     Function to calculate the final compliance
     """
     logits = model(None)
-    logits = logits.to(dtype=dtype)
+    x_phys = logits.to(dtype=dtype)
 
     # kwargs for displacement
     kwargs = dict(
@@ -439,14 +507,11 @@ def calculate_multi_material_compliance_v2(model, ke, args, device, dtype):
         dtype=dtype,
     )
 
-    softmax = nn.Softmax(dim=0)
-    x_phys = softmax(logits)
-
     # Calculate the forces
     forces = calculate_forces(x_phys, args)
 
     # Calculate the u_matrix
-    u_matrix = sparse_displace(
+    u_matrix = multi_material_sparse_displace_v2(
         x_phys, ke, args, forces, args["freedofs"], args["fixdofs"], **kwargs
     )
 

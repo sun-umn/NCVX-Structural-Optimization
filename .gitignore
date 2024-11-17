@@ -10,5 +10,6 @@ results/*
 raw_data/*
 images/*
 frames/*
+wandb/*
 
 *.DS_Store

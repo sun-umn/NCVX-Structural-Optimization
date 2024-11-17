@@ -306,10 +306,9 @@ class MultiMaterialCNNModel(nn.Module):
         dense_channels_tuple = (dense_channels,)
         offset_filters_tuple = conv_filters[:-1]
         offset_filters = dense_channels_tuple + offset_filters_tuple
-        kernel_sizes = [(3, 3), (5, 5), (5, 5), (7, 7), (11, 11)]
 
-        for resize, in_channels, out_channels, kernel_size in zip(
-            self.resizes, offset_filters, conv_filters, kernel_sizes
+        for resize, in_channels, out_channels in zip(
+            self.resizes, offset_filters, conv_filters
         ):
             convolution_layer = nn.Conv2d(
                 in_channels=in_channels,
@@ -321,8 +320,18 @@ class MultiMaterialCNNModel(nn.Module):
             # TODO: Since we are using a sin activation layer I will add
             # the SIREN initialization
             torch.nn.init.kaiming_normal_(
-                convolution_layer.weight, mode="fan_in", nonlinearity="leaky_relu"
+                convolution_layer.weight,
+                mode="fan_in",
+                nonlinearity="leaky_relu",
             )
+
+            # torch.nn.init.kaiming_uniform_(
+            #     convolution_layer.weight,
+            #     a=np.sqrt(0.15),
+            #     mode="fan_in",
+            #     nonlinearity="leaky_relu",
+            # )
+            # torch.nn.init.zeros_(convolution_layer.bias)
             self.conv.append(convolution_layer)
             self.global_normalization.append(GlobalNormalization())
 
@@ -376,11 +385,9 @@ class MultiMaterialCNNModel(nn.Module):
         output = output.permute(0, 2, 1).reshape(self.num_materials, -1).t()
 
         p = torch.maximum(torch.tensor(1.0), self.p)
-        print(self.p, p)
 
-        output = torch.exp(2.0 * output)
+        output = torch.exp(p * output)
 
-        # x_phys = torch.nn.Softplus()(x_phys)
         normalization = torch.norm(output, p=1, dim=1)
         output = output / normalization[:, None]
 
