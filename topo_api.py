@@ -29,16 +29,17 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
     fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)
 
     params = {
-        # material properties
+        # Material properties
         "young": 1.0,
+        # "young_min": 1e-9,
         "young_min": 1e-9,
         "poisson": 0.3,
         "g": 0.0,
-        # constraints
+        # Constraints
         "volfrac": problem.density,
         "xmin": 0.001,
         "xmax": 1.0,
-        # input parameters
+        # Input parameters
         "nelx": torch.tensor(problem.width),
         "nely": torch.tensor(problem.height),
         "mask": mask,
@@ -50,6 +51,12 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
         "epsilon": problem.epsilon,
         'ndof': len(alldofs),
         'tounn_mask': problem.tounn_mask,
+        # Morph into multi-material paradigm
+        'e_materials': torch.tensor([1.0], dtype=torch.double, device=device),
+        'material_density_weight': torch.tensor(
+            [1.0], dtype=torch.double, device=device
+        ),
+        'combined_frac': problem.density,
     }
     return params
 
@@ -294,3 +301,11 @@ def multi_material_bridge_task(
         "material_density_weight": material_density_weight,
     }
     return params
+
+
+def get_problem(problem_name):
+    """
+    Function to identify the multi-material paradigm.
+
+    TODO: Refactor to make more manageable.
+    """

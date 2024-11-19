@@ -324,15 +324,8 @@ class MultiMaterialCNNModel(nn.Module):
                 mode="fan_in",
                 nonlinearity="leaky_relu",
             )
-
-            # torch.nn.init.kaiming_uniform_(
-            #     convolution_layer.weight,
-            #     a=np.sqrt(0.15),
-            #     mode="fan_in",
-            #     nonlinearity="leaky_relu",
-            # )
-
             torch.nn.init.zeros_(convolution_layer.bias)
+
             self.conv.append(convolution_layer)
             self.global_normalization.append(GlobalNormalization())
 
@@ -391,6 +384,165 @@ class MultiMaterialCNNModel(nn.Module):
 
         normalization = torch.norm(output, p=1, dim=1)
         output = output / normalization[:, None]
+
+        return output
+
+
+class MultiMaterialCNNModelV2(nn.Module):
+    """
+    Class that implements the CNN model from the structural
+    optimization paper
+    """
+
+    def __init__(  # noqa
+        self,
+        args,
+        latent_size=128,
+        dense_channels=32,
+        resizes=(1, 2, 2, 2, 1),
+        conv_filters=(128 * 2 // 1, 64 * 2 // 1, 32 * 2 // 1, 16 * 2 // 1),
+        offset_scale=10.0,
+        kernel_size=(5, 5),
+        latent_scale=1.0,
+        dense_init_scale=1.0,
+        random_seed=0,
+    ):
+        super().__init__()
+        set_seed(random_seed)
+        self.args = args
+        # Update the convolutional filters for the expected
+        # number of material channels
+        self.num_materials = len(args['e_materials']) + 1
+        conv_filters = conv_filters + (self.num_materials,)
+
+        # Raise an error if the resizes are not equal to the convolutional
+        # filteres
+        if len(resizes) != len(conv_filters):
+            raise ValueError("resizes and filters are not the same!")
+
+        total_resize = int(np.prod(resizes))
+        self.h = int(
+            torch.div(args["nely"], total_resize, rounding_mode="floor").item()
+        )
+        self.w = int(
+            torch.div(args["nelx"], total_resize, rounding_mode="floor").item()
+        )
+        self.dense_channels = dense_channels
+        self.resizes = resizes
+        self.conv_filters = conv_filters
+        self.kernel_size = kernel_size
+        self.latent_size = latent_size
+        self.dense_init_scale = dense_init_scale
+        self.offset_scale = offset_scale
+
+        # Create the filters
+        filters = dense_channels * self.h * self.w
+
+        # Create the first dense layer
+        self.dense = nn.Linear(latent_size, filters)
+
+        # # Create the gain for the initializer
+        gain = self.dense_init_scale * np.sqrt(max(filters / latent_size, 1.0))
+
+        # Still the best initialization for the first layer
+        nn.init.orthogonal_(self.dense.weight, gain=gain)
+
+        # Create the convoluational layers that will be used
+        self.conv = nn.ModuleList()
+
+        # Global normalization layers
+        self.global_normalization = nn.ModuleList()
+
+        # Trainable bias layer
+        self.add_offset = nn.ModuleList()
+
+        # Add the convolutional layers to the module list
+        height = self.h
+        width = self.w
+
+        dense_channels_tuple = (dense_channels,)
+        offset_filters_tuple = conv_filters[:-1]
+        offset_filters = dense_channels_tuple + offset_filters_tuple
+
+        for resize, in_channels, out_channels in zip(
+            self.resizes, offset_filters, conv_filters
+        ):
+            convolution_layer = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=self.kernel_size,
+                padding="same",
+            )
+            # This was the best initialization
+            # TODO: Since we are using a sin activation layer I will add
+            # the SIREN initialization
+            torch.nn.init.kaiming_normal_(
+                convolution_layer.weight,
+                mode="fan_in",
+                nonlinearity="leaky_relu",
+            )
+            # torch.nn.init.zeros_(convolution_layer.bias)
+
+            self.conv.append(convolution_layer)
+            self.global_normalization.append(GlobalNormalization())
+
+            # TODO: Fix the offset layer
+            height = height * resize
+            width = width * resize
+            offset_layer = AddOffset(
+                scale=self.offset_scale,
+                conv_channels=out_channels,
+                height=height,
+                width=width,
+            )
+            self.add_offset.append(offset_layer)
+
+        # Set up z here otherwise it is not part of the leaf tensors
+        self.z = get_seeded_random_variable(latent_size, random_seed)
+        self.z = torch.mean(self.z, axis=0)
+        self.p = nn.Parameter(torch.tensor(2.0))
+
+        self.z = nn.Parameter(self.z)
+        self.softmax = nn.Softmax(dim=0)
+
+    def forward(self, x=None):  # noqa
+        # Create the model
+        output = self.dense(self.z)
+        output = output.reshape((1, self.dense_channels, self.h, self.w))
+
+        layer_loop = zip(self.resizes, self.conv_filters)
+        for idx, (resize, filters) in enumerate(layer_loop):
+            output = torch.sin(output)
+
+            # Upsample interpolation
+            output = Fun.interpolate(
+                output,
+                scale_factor=resize,
+                mode="bilinear",
+                align_corners=False,
+            )
+
+            # Apply the normalization
+            output = self.global_normalization[idx](output)
+
+            # Apply the 2D convolution
+            output = self.conv[idx](output)
+
+            if self.offset_scale != 0:
+                output = self.add_offset[idx](output)
+
+        # The final output will have num_materials + 1 (void)
+        output = torch.squeeze(output)
+
+        p = torch.maximum(torch.tensor(1.0), self.p)
+        output = torch.exp(p * output)
+
+        normalization = torch.norm(output, p=1, dim=0)
+        output = output / normalization[None, :]
+
+        mask = torch.broadcast_to(self.args["mask"], output.shape) > 0
+        mask = mask.requires_grad_(False)
+        output = output * mask.int()
 
         return output
 

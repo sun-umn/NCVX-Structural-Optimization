@@ -528,14 +528,6 @@ def mmtounn_train_and_outputs(
     # problem
     exampleName = 'TipCantilever'
 
-    # args = topo_api.multi_material_tip_cantilever_task(
-    #     nelx=nelx,
-    #     nely=nely,
-    #     e_materials=e_materials,
-    #     material_density_weight=material_density_weight,
-    #     combined_frac=combined_frac,
-    # )
-
     fixed = args['fixdofs'].numpy().astype(int)
     force = args['forces'].numpy().astype(np.float64)
     force = force[..., np.newaxis]
@@ -963,7 +955,7 @@ def run_multi_material_pipeline(problem_name):
 @click.option('--problem_name', default='mbb_beam_96x32_0.5')
 @click.option('--kernel_size', default="12,12")
 @click.option('--num_trials', default=1)
-def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_trials):
+def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_trials):
     """
     Task that will build out multiple structures and compare
     performance against known benchmarks.
@@ -1197,8 +1189,8 @@ def test_multi_material_bridge():
     conv_filters = (256, 128, 64, 32)
 
     cnn_kwargs = {
-        'latent_size': 96,
-        'dense_channels': 24,
+        'latent_size': 128,
+        'dense_channels': 32,
         'kernel_size': (5, 5),
         'conv_filters': conv_filters,
     }
@@ -1341,17 +1333,17 @@ def test_single_material_bridge():
     conv_filters = (256, 128, 64, 32)
 
     cnn_kwargs = {
-        'latent_size': 96,
-        'dense_channels': 24,
+        'latent_size': 124,
+        'dense_channels': 32,
         'kernel_size': (5, 5),
         'conv_filters': conv_filters,
     }
 
-    fig, axes = plt.subplots(2, 2, figsize=(15, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
     axes = axes.flatten()
 
     # Trials and seeds
-    seeds = [1234, 1985, 1986, 2009]
+    seeds = [1234]
     first_stage_maxit = 1500
     for idx, seed in enumerate(seeds):
         ax = axes[idx]
@@ -1402,7 +1394,7 @@ def test_single_material_bridge():
         )
         final_design = final_design.detach().numpy()
 
-        design = final_design.argmax(axis=1).reshape(128, 128).T
+        design = final_design[:, 1].reshape(128, 128).T
 
         ax.imshow(design, cmap='Greys', aspect="auto")
         ax.set_title(f'Compliance = {compliance}')

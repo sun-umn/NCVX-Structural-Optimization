@@ -20,13 +20,13 @@ def young_modulus(
 
 
 def young_modulus_multi_material_v2(
-    x, e_materials, e_min, p=3, device=utils.DEFAULT_DEVICE, dtype=utils.DEFAULT_DTYPE
+    x, e_materials, e_min, p=3.0, device=utils.DEFAULT_DEVICE, dtype=utils.DEFAULT_DTYPE
 ):
     """
     Function that calculates the young modulus for multiple materials
     """
     e_materials = e_materials[:, None, None]
-    material_density = e_min + x**p * (e_materials - e_min)
+    material_density = e_min + x * (e_materials - e_min)
 
     return material_density.sum(axis=0).to(device=device, dtype=dtype)
 
@@ -44,9 +44,7 @@ def young_modulus_multi_material(
     e_materials = e_materials.reshape(num_materials, 1).T
     material_density = (e_materials - e_min) * penalized_materials + e_min
     young_modulus = material_density.sum(axis=1).flatten()
-    # import pdb; pdb.set_trace()
 
-    # young_modulus = (e_materials * penalized_materials).sum(axis=1).flatten()
     return young_modulus.to(device=device, dtype=dtype)
 
 
@@ -502,7 +500,7 @@ def calculate_multi_material_compliance_v2(model, ke, args, device, dtype):
     kwargs = dict(
         penal=args["penal"],
         e_min=args["young_min"],
-        e_0=args["young"],
+        e_0=args["e_materials"],
         base="MATLAB",
         device=device,
         dtype=dtype,
@@ -513,12 +511,12 @@ def calculate_multi_material_compliance_v2(model, ke, args, device, dtype):
 
     # Calculate the u_matrix
     u_matrix = multi_material_sparse_displace_v2(
-        x_phys, ke, args, forces, args["freedofs"], args["fixdofs"], **kwargs
+        x_phys[1:, :, :], ke, args, forces, args["freedofs"], args["fixdofs"], **kwargs
     )
 
     # Calculate the compliance output
     compliance_output, _, _ = multi_material_compliance_v2(
-        x_phys, u_matrix, ke, args, **kwargs
+        x_phys[1:, :, :], u_matrix, ke, args, **kwargs
     )
 
     # The loss is the sum of the compliance
