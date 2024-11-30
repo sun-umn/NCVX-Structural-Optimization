@@ -19,17 +19,18 @@ import utils
 
 # Incorporating Multi-Material Designs
 def multi_material_constraint_function(
-    model, initial_compliance, ke, args, add_constraints, device, dtype
+    model, initial_compliance, ke, args, device, dtype
 ):
     """
     Function to implement MMTO constraints for our framework
     """
     model.eval()
 
-    # TODO: Changing to V2
+    # Calculate compliance and designs
     (
         unscaled_compliance,
         x_phys,
+        logits,
         mask,
     ) = topo_physics.calculate_multi_material_compliance(model, ke, args, device, dtype)
 
@@ -47,24 +48,48 @@ def multi_material_constraint_function(
         * args['nely']
         * args['combined_frac']
     )
+
     # Pixel total here will be the number of rows
-    # pixel_total = x_phys.shape[0]
-    pixel_total = x_phys.numel()
+    pixel_total = args['nelx'] * args['nely']
 
     mass_constraint = torch.zeros(num_materials)
     for index, density_weight in enumerate(args['material_density_weight']):
-        mass_constraint[index] = density_weight * torch.sum(x_phys[:, index + 1])
+        mass_constraint[index] = density_weight * torch.sum(logits[index + 1, :, :])
 
     c1 = (torch.sum(mass_constraint) / total_mass) - 1.0
     ce.c1 = c1  # noqa
 
-    # TODO: Remove? if add_constraints:
-    # Directly binary constraint
-    binary_constraint = x_phys * (1 - x_phys)
-    c2 = torch.norm(binary_constraint, p=1) / pixel_total
-    ce.c2 = c2
+    binary_constraint = 0
+    bcv = 0
+    for i in range(num_materials):
+        channel = x_phys[:, i + 1].flatten()
+        binary_constraint_value = torch.norm(channel * (1 - channel), p=1)
+        bcv += binary_constraint_value.detach().item()
+        binary_constraint += binary_constraint_value / pixel_total
 
-    print(unscaled_compliance.item(), c1.item(), c2.item())
+    ce.c2 = binary_constraint - 5e-4
+
+    # Add symmetry
+    x_symmetry = 0
+    if args["x_symmetry"]:
+        x_size = logits.shape[2]
+        midpoint = x_size // 2
+        for i in range(num_materials + 1):
+            channel = logits[i, :, :]
+            channel_l = channel[:midpoint, :]
+            channel_r = torch.flip(channel[-midpoint:, :], [1])
+            symmetry_constraint = torch.norm(channel_l - channel_r, p=1) / pixel_total
+            x_symmetry += symmetry_constraint
+
+        ce.c3 = x_symmetry
+
+    print(
+        unscaled_compliance.item(),
+        c1.item(),
+        binary_constraint.item(),
+        x_symmetry,
+        bcv,
+    )
 
     # Let's try and clear as much stuff as we can to preserve memory
     del x_phys, mask, ke
@@ -72,106 +97,6 @@ def multi_material_constraint_function(
     torch.cuda.empty_cache()
 
     return f, ci, ce
-
-
-def multi_material_constraint_function_v2(
-    model,
-    initial_compliance,
-    ke,
-    args,
-    volume_constraint_list,
-    binary_constraint_list,
-    symmetry_constraint_list,
-    iter_counter,
-    device,
-    dtype,
-):
-    """
-    Function to implement MMTO constraints for our framework
-    """
-    model.eval()
-
-    # TODO: Changing to V2
-    (
-        unscaled_compliance,
-        x_phys,
-        mask,
-    ) = topo_physics.calculate_multi_material_compliance_v2(
-        model, ke, args, device, dtype
-    )
-
-    model.train()
-    f = 1.0 / initial_compliance * unscaled_compliance
-
-    # Run this problem with no inequality constraints
-    ci = None
-
-    ce = pygransoStruct()
-    num_materials = len(args['e_materials'])
-    total_mass = (
-        torch.max(args['material_density_weight'])
-        * args['nelx']
-        * args['nely']
-        * args['combined_frac']
-    )
-
-    # Pixel total here will be the number of rows
-    pixel_total = x_phys.numel()
-
-    mass_constraint = torch.zeros(num_materials)
-    for index, density_weight in enumerate(args['material_density_weight']):
-        mass_constraint[index] = density_weight * torch.sum(x_phys[index + 1, :, :])
-
-    c1 = (torch.sum(mass_constraint) / total_mass) - 1.0
-    volume_constraint_list.append(np.abs(c1.item()))
-    ce.c1 = c1  # noqa
-
-    # Binary constraint
-    binary_constraint = x_phys * (1 - x_phys)
-    c2 = torch.norm(binary_constraint, p=1) / pixel_total
-    binary_constraint_list.append(np.abs(c2.item()))
-    ce.c2 = c2
-
-    print(unscaled_compliance.item(), c1.item(), c2.item())
-
-    iter_counter += 1
-
-    # Let's try and clear as much stuff as we can to preserve memory
-    del x_phys, mask, ke
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    return f, ci, ce
-
-
-def train_pygranso_mmto(model, comb_fn, maxit, device) -> None:
-    # Initalize the opts
-    opts = pygransoStruct()
-
-    # Set the device
-    opts.torch_device = device
-
-    # Setup the intitial inputs for the solver
-    nvar = getNvarTorch(model.parameters())
-    opts.x0 = (
-        torch.nn.utils.parameters_to_vector(model.parameters())
-        .detach()
-        .reshape(nvar, 1)
-    ).to(device=device, dtype=torch.double)
-
-    # Additional pygranso options
-    opts.limited_mem_size = 100
-    opts.torch_device = device
-    opts.double_precision = True
-    opts.mu0 = 1.0
-    opts.maxit = maxit
-    opts.print_frequency = 1
-    opts.stat_l2_model = False
-    opts.viol_eq_tol = 1e-4
-    opts.opt_tol = 1e-4
-
-    # Main algorithm with logging enabled.
-    _ = pygranso(var_spec=model, combined_fn=comb_fn, user_opts=opts)
 
 
 # Updated Section for training PyGranso with Direct Volume constraints
@@ -476,218 +401,48 @@ def train_pygranso(
     return outputs
 
 
-def train_pygranso_v2(
-    problem,
-    pygranso_combined_function,
-    device,
-    requires_flip,
-    total_frames,
-    cnn_kwargs=None,
-    *,
-    num_trials=50,
-    mu=1.0,
-    maxit=500,
-    include_symmetry=False,
-    include_penalty=False
-) -> Dict[str, Any]:
-    """
-    Function to train structural optimization pygranso
-    """
-    # Set up the dtypes
-    dtype32 = torch.double
-    default_dtype = utils.DEFAULT_DTYPE
+def train_pygranso_mmto(model, comb_fn, maxit, device) -> None:
+    # Initalize the opts
+    opts = pygransoStruct()
 
-    # Get the problem args
-    args = topo_api.specified_task(problem, device=device)
-    if not include_penalty:
-        args['penal'] = 3.0
+    # Set the device
+    opts.torch_device = device
 
-    # Create the stiffness matrix
-    ke = topo_physics.get_stiffness_matrix(
-        young=args["young"],
-        poisson=args["poisson"],
-        device=device,
-    )
+    # Setup the intitial inputs for the solver
+    nvar = getNvarTorch(model.parameters())
+    opts.x0 = (
+        torch.nn.utils.parameters_to_vector(model.parameters())
+        .detach()
+        .reshape(nvar, 1)
+    ).to(device=device, dtype=torch.double)
 
-    # Trials
-    trials_designs = np.zeros((num_trials, args["nely"], args["nelx"]))
-    trials_losses = np.full((maxit + 1, num_trials), np.nan)
-    trials_volumes = np.full((maxit + 1, num_trials), np.nan)
-    trials_binary_constraint = np.full((maxit + 1, num_trials), np.nan)
-    trials_symmetry_constraint = np.full((maxit + 1, num_trials), np.nan)
-    trials_initial_volumes = []
+    # Additional pygranso options
+    opts.limited_mem_size = 100
+    opts.torch_device = device
+    opts.double_precision = True
+    opts.mu0 = 1.0
+    opts.maxit = maxit
+    opts.print_frequency = 1
+    opts.stat_l2_model = False
+    opts.viol_eq_tol = 1e-4
+    opts.opt_tol = 1e-4
 
-    for index, seed in enumerate(range(0, num_trials)):
-        models.set_seed(seed * 10)
-        counter = 0
-        np.random.seed(seed)
-        torch.random.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+    # Add functionality for logging
+    mHLF_obj = utils.HaltLog()
+    halt_log_fn, get_log_fn = mHLF_obj.makeHaltLogFunctions(opts.maxit)
 
-        # Initialize the CNN Model
-        if cnn_kwargs is not None:
-            cnn_model = models.MultiMaterialCNNModelV2(
-                args, random_seed=seed, **cnn_kwargs
-            ).to(device=device, dtype=torch.double)
-            cnn_model = cnn_model.to(device=device, dtype=dtype32)
-        else:
-            cnn_model = models.MultiMaterialCNNModelV2(args, random_seed=seed).to(  # type: ignore  # noqa
-                device=device, dtype=dtype32
-            )
+    # Set PyGRANSO's logging function in opts
+    opts.halt_log_fn = halt_log_fn
 
-        # Calculate initial compliance
-        cnn_model.eval()
-        with torch.no_grad():
-            (
-                initial_compliance,
-                init_x_phys,
-                init_mask,
-            ) = topo_physics.calculate_multi_material_compliance_v2(
-                cnn_model, ke, args, device, default_dtype
-            )
+    # Main algorithm with logging enabled.
+    _ = pygranso(var_spec=model, combined_fn=comb_fn, user_opts=opts)
 
-        # Get the initial compliance
-        initial_compliance = (
-            torch.ceil(initial_compliance.to(torch.float64).detach()) + 1e-2
-        )
+    # Get the iterations
+    log = get_log_fn()
 
-        # Get the initial volume
-        initial_volume = torch.mean(init_x_phys[init_mask])
-        trials_initial_volumes.append(initial_volume.detach().cpu().numpy())
-
-        # Put the cnn model in training mode
-        cnn_model.train()
-
-        # Combined function
-        volume_constraint: List[float] = []  # noqa
-        binary_constraint: List[float] = []  # noqa
-
-        symmetry_constraint = None
-        if include_symmetry:
-            symmetry_constraint = []  # type: ignore
-
-        comb_fn = lambda model: pygranso_combined_function(  # noqa
-            cnn_model,  # noqa
-            initial_compliance,
-            ke,
-            args,
-            volume_constraint_list=volume_constraint,  # noqa
-            binary_constraint_list=binary_constraint,  # noqa
-            symmetry_constraint_list=symmetry_constraint,  # noqa
-            iter_counter=counter,
-            device=device,
-            dtype=default_dtype,
-        )
-
-        # Initalize the pygranso options
-        opts = pygransoStruct()
-
-        # Set the device
-        opts.torch_device = device
-
-        # Setup the intitial inputs for the solver
-        nvar = getNvarTorch(cnn_model.parameters())
-        opts.x0 = (
-            torch.nn.utils.parameters_to_vector(cnn_model.parameters())
-            .detach()
-            .reshape(nvar, 1)
-        ).to(device=device, dtype=dtype32)
-
-        # Additional pygranso options
-        opts.limited_mem_size = 20
-        opts.torch_device = device
-        opts.double_precision = True
-        opts.mu0 = mu
-        opts.maxit = maxit
-        opts.print_frequency = 1
-        opts.stat_l2_model = False
-        opts.viol_eq_tol = 1e-7
-        opts.opt_tol = 1e-7
-
-        mHLF_obj = utils.HaltLog()
-        halt_log_fn, get_log_fn = mHLF_obj.makeHaltLogFunctions(opts.maxit)
-
-        #  Set PyGRANSO's logging function in opts
-        opts.halt_log_fn = halt_log_fn
-
-        # Main algorithm with logging enabled.
-        soln = pygranso(var_spec=cnn_model, combined_fn=comb_fn, user_opts=opts)
-
-        # GET THE HISTORY OF ITERATES
-        # Even if an error is thrown, the log generated until the error can be
-        # obtained by calling get_log_fn()
-        log = get_log_fn()
-
-        # Final structure
-        indexes = (pd.Series(log.fn_evals).cumsum() - 1).values.tolist()
-
-        cnn_model.eval()
-        with torch.no_grad():
-            (
-                final_compliance,
-                final_design,
-                _,
-            ) = topo_physics.calculate_multi_material_compliance_v2(
-                cnn_model, ke, args, device, default_dtype
-            )
-            final_design = final_design.detach().cpu().numpy()
-
-        # Calculate metrics on original scale
-        final_f = soln.final.f * initial_compliance.cpu().numpy()
-        log_f = pd.Series(log.f) * initial_compliance.cpu().numpy()
-
-        # Save the data from each trial
-        # trials
-        trials_designs[index, :, :] = final_design.argmax(axis=0)
-        trials_losses[: len(log_f), index] = log_f.values  # noqa
-
-        volume_constraint_arr = np.asarray(volume_constraint)
-        trials_volumes[: len(log_f), index] = volume_constraint_arr[indexes]
-
-        binary_constraint_arr = np.asarray(binary_constraint)
-        trials_binary_constraint[: len(log_f), index] = binary_constraint_arr[indexes]
-
-        if include_symmetry:
-            symmetry_constraint_arr = np.asarray(symmetry_constraint)
-            trials_symmetry_constraint[: len(log_f), index] = symmetry_constraint_arr[
-                indexes
-            ]
-
-        # Remove all variables for the next round
-        del (
-            cnn_model,
-            comb_fn,
-            opts,
-            mHLF_obj,
-            halt_log_fn,
-            get_log_fn,
-            soln,
-            log,
-            final_design,
-            final_f,
-            log_f,
-            volume_constraint,
-            binary_constraint,
-            symmetry_constraint,
-        )
-        gc.collect()
-        torch.cuda.empty_cache()
-
-    # If symmetry is NOT included then the array will just
-    # be nan
-    outputs = {
-        "designs": trials_designs,
-        "losses": trials_losses,
-        "volumes": trials_volumes,
-        "binary_constraint": trials_binary_constraint,
-        "symmetry_constraint": trials_symmetry_constraint,
-        # Convert to numpy array
-        "trials_initial_volumes": np.array(trials_initial_volumes),
-    }
-
-    return outputs
+    # Logic to get the data connected to the final computation of
+    # the iteration
+    indexes = (pd.Series(log.fn_evals).cumsum() - 1).values.tolist()
 
 
 def unconstrained_structural_optimization_function(model, ke, args, designs, losses):

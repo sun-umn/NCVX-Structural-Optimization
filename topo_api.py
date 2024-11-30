@@ -32,7 +32,7 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
         # Material properties
         "young": 1.0,
         # "young_min": 1e-9,
-        "young_min": 1e-9,
+        "young_min": 1e-3,
         "poisson": 0.3,
         "g": 0.0,
         # Constraints
@@ -209,6 +209,7 @@ def multi_material_tip_cantilever_task(
     freedofs_array = np.sort(list(set(alldofs_array) - set(fixdofs_array)))
 
     # Convert to torch tensorse)
+    mask = torch.tensor(torch.tensor(1.0)).to(device=device, dtype=dtype)
     freedofs = torch.tensor(freedofs_array).to(device=device, dtype=torch.long)
     fixdofs = torch.tensor(fixdofs_array).to(device=device, dtype=torch.long)
 
@@ -225,6 +226,7 @@ def multi_material_tip_cantilever_task(
         # input parameters
         "nelx": torch.tensor(nelx),
         "nely": torch.tensor(nely),
+        "mask": mask,
         "freedofs": freedofs,
         "fixdofs": fixdofs,
         "forces": forces,
@@ -234,6 +236,8 @@ def multi_material_tip_cantilever_task(
         "ndof": len(alldofs_array),
         "e_materials": e_materials,
         "material_density_weight": material_density_weight,
+        "y_symmetry": False,
+        "x_symmetry": False,
     }
     return params
 
@@ -274,6 +278,7 @@ def multi_material_bridge_task(
     freedofs_array = np.sort(list(set(alldofs_array) - set(fixdofs_array)))
 
     # Convert to torch tensorse)
+    mask = torch.tensor(torch.tensor(1.0)).to(device=device, dtype=dtype)
     freedofs = torch.tensor(freedofs_array).to(device=device, dtype=torch.long)
     fixdofs = torch.tensor(fixdofs_array).to(device=device, dtype=torch.long)
 
@@ -290,6 +295,7 @@ def multi_material_bridge_task(
         # input parameters
         "nelx": torch.tensor(nelx),
         "nely": torch.tensor(nely),
+        "mask": mask,
         "freedofs": freedofs,
         "fixdofs": fixdofs,
         "forces": forces,
@@ -299,6 +305,8 @@ def multi_material_bridge_task(
         "ndof": len(alldofs_array),
         "e_materials": e_materials,
         "material_density_weight": material_density_weight,
+        "y_symmetry": False,
+        "x_symmetry": True,
     }
     return params
 

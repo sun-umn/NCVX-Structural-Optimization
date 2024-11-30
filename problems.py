@@ -723,7 +723,7 @@ def build_problems_by_name(device=DEFAULT_DEVICE):
         # idealized beam and cantilevers
         "mbb_beam": [
             mbb_beam(96, 32, density=0.5, device=device),
-            mbb_beam(192, 64, density=0.4, device=device),
+            mbb_beam(192, 64, density=0.5, device=device),
             mbb_beam(384, 128, density=0.3, device=device),
             mbb_beam(384, 128, density=0.5, device=device),
             mbb_beam(192, 32, density=0.5, device=device),

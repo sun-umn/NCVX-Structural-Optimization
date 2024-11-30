@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH --time=24:00:00
 #SBATCH --ntasks-per-node=8
-#SBATCH --mem=75g
+#SBATCH --mem=60g
 #SBATCH --tmp=10g
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=dever120@umn.edu
@@ -12,4 +12,4 @@ echo $PATH
 nvidia-smi
 eval "$(conda shell.bash hook)"
 conda activate top-opt
-python -m tasks test-single-material-bridge-v2
+python -m tasks test-single-material-l-shape

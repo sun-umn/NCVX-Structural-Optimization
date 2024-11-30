@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH --time=24:00:00
 #SBATCH --ntasks-per-node=8
-#SBATCH --mem=60g
+#SBATCH --mem=70g
 #SBATCH --tmp=10g
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=dever120@umn.edu

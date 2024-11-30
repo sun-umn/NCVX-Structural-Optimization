@@ -19,18 +19,6 @@ def young_modulus(
     return (e_min + x**p * (e_0 - e_min)).to(device=device, dtype=dtype)
 
 
-def young_modulus_multi_material_v2(
-    x, e_materials, e_min, p=3.0, device=utils.DEFAULT_DEVICE, dtype=utils.DEFAULT_DTYPE
-):
-    """
-    Function that calculates the young modulus for multiple materials
-    """
-    e_materials = e_materials[:, None, None]
-    material_density = e_min + x * (e_materials - e_min)
-
-    return material_density.sum(axis=0).to(device=device, dtype=dtype)
-
-
 def young_modulus_multi_material(
     x, e_materials, e_min, p=3, device=utils.DEFAULT_DEVICE, dtype=utils.DEFAULT_DTYPE
 ):
@@ -48,7 +36,6 @@ def young_modulus_multi_material(
     return young_modulus.to(device=device, dtype=dtype)
 
 
-# Define the physical density with torch
 def physical_density(x, args, volume_constraint=True, filtering=False):
     """
     Function that calculates the physical density
@@ -163,39 +150,6 @@ def compliance(
     return young_x_phys * ce.t(), None, None
 
 
-def multi_material_compliance_v2(
-    x_phys,
-    u,
-    ke,
-    args,
-    *,
-    penal=3,
-    e_min=1e-9,
-    e_0=1,
-    base="Google",
-    device=utils.DEFAULT_DEVICE,
-    dtype=utils.DEFAULT_DTYPE,
-):
-    """
-    Calculate the compliance objective.
-    NOTE: For our implementation both x_phys and u will require_grad
-    and will both be torch tensors.
-    """
-    nely, nelx = args["nely"], args["nelx"]
-
-    # Updated code
-    edof, x_list, y_list = build_nodes_data(args, base=base)
-    ce = (u[edof] @ ke) * u[edof]
-    ce = torch.sum(ce, 1)
-    ce = ce.reshape(nelx, nely)
-
-    young_x_phys = young_modulus_multi_material_v2(
-        x_phys, e_0, e_min, p=penal, device=device, dtype=dtype
-    )
-
-    return young_x_phys * ce.t(), None, None
-
-
 def multi_material_compliance(
     stiffness,
     u,
@@ -266,76 +220,6 @@ def sparse_displace(
     Function that displaces the load x using finite element techniques.
     """
     stiffness = young_modulus(x_phys, e_0, e_min, p=penal, device=device, dtype=dtype)
-
-    # Get the K values
-    k_entries, k_ylist, k_xlist = get_k_data(stiffness, ke, args, base=base)
-    k_ylist = k_ylist.to(device=device, dtype=dtype)
-    k_xlist = k_xlist.to(device=device, dtype=dtype)
-
-    index_map, keep, indices = utils._get_dof_indices(
-        freedofs,
-        fixdofs,
-        k_ylist,
-        k_xlist,
-        k_entries,
-    )
-
-    # Reduced forces
-    freedofs_forces = forces[freedofs].double().to(device=device, dtype=dtype)
-    size = freedofs_forces.cpu().numpy().size
-
-    # Require gradient on the forces
-    freedofs_forces = freedofs_forces.requires_grad_()
-
-    # Calculate u_nonzero
-    keep_k_entries = k_entries[keep]
-
-    # Build the sparse matrix
-    K = torch.sparse_coo_tensor(indices, keep_k_entries, [size, size]).to(
-        device=device, dtype=dtype
-    )
-
-    # Symmetric indices
-    keep_k_entries = K.coalesce().values()
-    indices = K.coalesce().indices()
-
-    # Compute the u_matrix values
-    u_nonzero = utils.solve_coo(
-        keep_k_entries,
-        indices,
-        freedofs_forces,
-        sym_pos=True,
-        device=device,
-        dtype=dtype,
-    )
-    fixdofs_zeros = torch.zeros(len(fixdofs)).to(device=device, dtype=dtype)
-    u_values = torch.cat((u_nonzero, fixdofs_zeros))
-    u_values = u_values[index_map].to(device=device, dtype=dtype)
-
-    return u_values
-
-
-def multi_material_sparse_displace_v2(
-    x_phys,
-    ke,
-    args,
-    forces,
-    freedofs,
-    fixdofs,
-    *,
-    penal=3,
-    e_min=1e-9,
-    e_0=1,
-    base="Google",
-    device=utils.DEFAULT_DEVICE,
-    dtype=utils.DEFAULT_DTYPE,
-):
-    """
-    Function that displaces the load x using finite element techniques.
-    """
-    stiffness = young_modulus_multi_material_v2(
-        x_phys, e_0, e_min, p=penal, device=device, dtype=dtype
-    )
 
     # Get the K values
     k_entries, k_ylist, k_xlist = get_k_data(stiffness, ke, args, base=base)
@@ -489,46 +373,12 @@ def calculate_compliance(model, ke, args, device, dtype):
     return torch.sum(compliance_output), x_phys, mask
 
 
-def calculate_multi_material_compliance_v2(model, ke, args, device, dtype):
-    """
-    Function to calculate the final compliance
-    """
-    logits = model(None)
-    x_phys = logits.to(dtype=dtype)
-
-    # kwargs for displacement
-    kwargs = dict(
-        penal=args["penal"],
-        e_min=args["young_min"],
-        e_0=args["e_materials"],
-        base="MATLAB",
-        device=device,
-        dtype=dtype,
-    )
-
-    # Calculate the forces
-    forces = calculate_forces(x_phys, args)
-
-    # Calculate the u_matrix
-    u_matrix = multi_material_sparse_displace_v2(
-        x_phys[1:, :, :], ke, args, forces, args["freedofs"], args["fixdofs"], **kwargs
-    )
-
-    # Calculate the compliance output
-    compliance_output, _, _ = multi_material_compliance_v2(
-        x_phys[1:, :, :], u_matrix, ke, args, **kwargs
-    )
-
-    # The loss is the sum of the compliance
-    return torch.sum(compliance_output), x_phys, _
-
-
 def calculate_multi_material_compliance(model, ke, args, device, dtype):
     """
     Function to calculate the final compliance
     """
     logits = model(None)
-    x_phys = logits.to(dtype=dtype)
+    logits = logits.to(dtype=dtype)
 
     # kwargs for displacement
     kwargs = dict(
@@ -539,10 +389,16 @@ def calculate_multi_material_compliance(model, ke, args, device, dtype):
         device=device,
         dtype=dtype,
     )
-    # print(kwargs)
 
-    # For now set the mask to None
-    mask = None
+    num_materials = len(args['e_materials']) + 1
+
+    mask = torch.broadcast_to(args["mask"], logits.shape) > 0
+    mask = mask.requires_grad_(False)
+
+    logits = logits * mask.int()
+
+    x_phys = logits
+    x_phys = x_phys.permute(0, 2, 1).reshape(num_materials, -1).t()
 
     # Need to compute a stiffness matrix
     stiffness = young_modulus_multi_material(
@@ -568,7 +424,7 @@ def calculate_multi_material_compliance(model, ke, args, device, dtype):
     )
 
     # The loss is the sum of the compliance
-    return torch.sum(compliance_output), x_phys, mask
+    return torch.sum(compliance_output), x_phys, logits, mask
 
 
 def build_K_matrix(x_phys, args, base="MATLAB"):
