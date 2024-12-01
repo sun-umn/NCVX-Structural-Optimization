@@ -48,7 +48,6 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
         "forces": problem.forces.ravel(),
         "penal": 3.0,
         "filter_width": 2,
-        "epsilon": problem.epsilon,
         'ndof': len(alldofs),
         'tounn_mask': problem.tounn_mask,
         # Morph into multi-material paradigm
@@ -57,6 +56,8 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
             [1.0], dtype=torch.double, device=device
         ),
         'combined_frac': problem.density,
+        'x_symmetry': problem.x_symmetry,
+        'y_symmetry': problem.y_symmetry,
     }
     return params
 

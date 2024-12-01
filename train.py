@@ -101,6 +101,7 @@ def multi_material_constraint_function(
 def multi_material_constraint_function_v2(
     model,
     initial_compliance,
+    initial_void_compliance,
     ke,
     args,
     volume_constraint_list,
@@ -113,7 +114,7 @@ def multi_material_constraint_function_v2(
     Function to implement MMTO constraints for our framework
     """
     # Variables
-    num_materials = len(args['e_materials'])
+    num_materials = len(args['e_materials']) + 1
     total_mass = (
         torch.max(args['material_density_weight'])
         * args['nelx']
@@ -123,33 +124,32 @@ def multi_material_constraint_function_v2(
     pixel_total = args['nelx'] * args['nely']
     material_density_weight = args['material_density_weight']
 
-    # Put model in eval mode so we can compute
-    # values entering the function
-    model.eval()
-
     # Calculate compliance and designs
-    with torch.no_grad():
-        (
-            compliance,
-            x_phys,
-            logits,
-            mask,
-        ) = topo_physics.calculate_multi_material_compliance(
-            model, ke, args, device, dtype
-        )
+    (
+        compliance,
+        x_phys,
+        logits,
+        mask,
+    ) = topo_physics.calculate_multi_material_compliance(model, ke, args, device, dtype)
+
+    # Compute the void compliance
+    (
+        void_compliance,
+        _,
+        _,
+    ) = topo_physics.calculate_void_compliance(model, ke, args, device, dtype)
 
     # Model in training mode
     model.train()
 
     # Pygranso setup
     f = 1.0 / initial_compliance * compliance
-
-    ci = None
+    f_void = 1.0 / initial_void_compliance * void_compliance
 
     ce = pygransoStruct()
 
     # Compute the mass constraint
-    mass_constraint = torch.zeros(num_materials)
+    mass_constraint = torch.zeros(num_materials - 1)
     for index, density_weight in enumerate(material_density_weight):
         mass_constraint[index] = density_weight * torch.sum(x_phys[:, index + 1])
 
@@ -159,7 +159,7 @@ def multi_material_constraint_function_v2(
     # Compute the discrete (binary) constraint
     discrete_constraint = 0
     for i in range(num_materials):
-        material_channel_values = x_phys[:, i + 1].flatten()
+        material_channel_values = x_phys[:, i].flatten()
         discrete_constraint_value = torch.norm(
             material_channel_values * (1 - material_channel_values), p=1
         )
@@ -169,7 +169,7 @@ def multi_material_constraint_function_v2(
     ce.c2 = discrete_constraint
 
     # Compute symmetry values
-    x_symmetry_constraint = 0
+    x_symmetry_constraint = torch.tensor(0.0)
     if args["x_symmetry"]:
 
         # Get the midpoint of the design grid
@@ -177,7 +177,7 @@ def multi_material_constraint_function_v2(
         midpoint = x_size // 2
 
         # Each material channel should have symmetry
-        for i in range(num_materials + 1):
+        for i in range(num_materials):
             channel_values = logits[i, :, :]
             channel_left = channel_values[:midpoint, :]
             channel_right = torch.flip(channel_values[-midpoint:, :], [1])
@@ -188,11 +188,23 @@ def multi_material_constraint_function_v2(
 
         ce.c3 = x_symmetry_constraint
 
+    # Add constraint for void channel
+    ci = pygransoStruct()
+
+    void_mass = (1 - x_phys[:, 0]).mean()
+    void_constraint = (void_mass / args['combined_frac']) - 1.0
+
+    ci.c1 = void_constraint - 0.05
+    ci.c2 = -void_constraint + 0.05
+
+    # ci = None
+
     print(
         compliance.item(),
         mass_constraint.item(),
         discrete_constraint.item(),
         x_symmetry_constraint.item(),
+        void_constraint.item(),
     )
 
     # Save all calculations for analysis
@@ -207,7 +219,7 @@ def multi_material_constraint_function_v2(
     gc.collect()
     torch.cuda.empty_cache()
 
-    return f, ci, ce
+    return (f + f_void) / 2.0, ci, ce
 
 
 # Updated Section for training PyGranso with Direct Volume constraints
@@ -564,6 +576,8 @@ def train_pygranso_v2(
         # Calculate the initial compliance
         model.eval()
         with torch.no_grad():
+            # Calculate initial compliance for multi-material
+            # channels
             (
                 initial_compliance,
                 initial_x_phys,
@@ -577,10 +591,22 @@ def train_pygranso_v2(
                 dtype,
             )
 
+            # Calculate compliance of the void channel
+            (initial_void_compliance, _, _,) = topo_physics.calculate_void_compliance(
+                model,
+                ke,
+                args,
+                device,
+                dtype,
+            )
+
         # Detach the initial values so we can use them during
         # calculations as a scaling factor
         initial_compliance = (
             torch.ceil(initial_compliance.to(dtype=torch.float64).detach()) + 1.0
+        )
+        initial_void_compliance = (
+            torch.ceil(initial_void_compliance.to(dtype=torch.float64).detach()) + 1.0
         )
 
         # Put the model back into training model
@@ -594,7 +620,9 @@ def train_pygranso_v2(
 
         # initialize the pygranso combined function
         combined_fn = lambda model: multi_material_constraint_function_v2(  # noqa
+            model,
             initial_compliance,
+            initial_void_compliance,
             ke,
             args,
             volume_constraint_list,
@@ -618,10 +646,10 @@ def train_pygranso_v2(
         opts.double_precision = True
         opts.mu0 = mu
         opts.maxit = maxit
-        opts.print_frequency = 20
+        opts.print_frequency = 1
         opts.stat_l2_model = False
-        opts.viol_eq_tol = 1e-5
-        opts.opt_tol = 1e-5
+        opts.viol_eq_tol = 1e-4
+        opts.opt_tol = 1e-4
 
         # Setup logging for pygranso
         mHLF_obj = utils.HaltLog()
@@ -659,7 +687,7 @@ def train_pygranso_v2(
 
         # Get the final compliance
         final_compliance = soln.final.f * initial_compliance.item()
-        log_compliance = pd.Series(log.f) * initial_compliance.itme()
+        log_compliance = pd.Series(log.f) * initial_compliance.item()
 
         # Save all trials data
         trials_designs[index, :, :, :] = final_design
@@ -675,6 +703,7 @@ def train_pygranso_v2(
             : len(log_compliance), index
         ] = discrete_constraint_array[indexes]
 
+        x_symmetry_constraint_array = np.zeros(1)
         if args['x_symmetry']:
             x_symmetry_constraint_array = np.asarray(x_symmetry_constraint_list)
             trials_x_symmetry_constraint[

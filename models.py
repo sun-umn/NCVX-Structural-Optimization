@@ -253,7 +253,7 @@ class MultiMaterialCNNModel(nn.Module):
         super().__init__()
         set_seed(random_seed)
         self.args = args
-        self.multiplier = 4
+        self.multiplier = 16
         print(kernel_size)
 
         # Update the convolutional filters for the expected

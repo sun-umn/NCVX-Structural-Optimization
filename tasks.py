@@ -1767,7 +1767,7 @@ def test_single_material_mbb_beam():
     scale_factor = 1.0
     latent_size = 96
     dense_channels = 24
-    kernel_size = (11, 11)
+    kernel_size = (5, 5)
     ks_string = ",".join(map(str, kernel_size))
 
     # DIP Setup
