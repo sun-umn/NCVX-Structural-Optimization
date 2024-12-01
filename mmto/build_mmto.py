@@ -50,20 +50,9 @@ def finite_element(args, nelx, nely, E_Interpolation, KE):
             K[edof[:, np.newaxis], edof] += E_Interpolation[ely, elx] * KE
 
     # Define loads (F) and supports (fixeddofs)
-    F = lil_matrix(args['forces'])
+    F = lil_matrix(args['forces']).T
     fixeddofs = args['fixdofs']
     freedofs = args['freedofs']
-    # F[2 * (nely + 1) * int(nelx // 4 + 1) - 1, 0] = -1
-    # F[2 * (nely + 1) * int(2 * nelx // 4 + 1) - 1, 0] = -2
-    # F[2 * (nely + 1) * int(3 * nelx // 4 + 1) - 1, 0] = -1
-    # fixeddofs = np.union1d(
-    #     np.array([2 * (nely + 1) - 1 - 1, 2 * (nely + 1) - 1]),
-    #     np.array([2 * (nelx + 1) * (nely + 1) - 1]),
-    # )
-
-    # # Define all degrees of freedom and free degrees of freedom
-    # alldofs = np.arange(2 * (nely + 1) * (nelx + 1))
-    # freedofs = np.setdiff1d(alldofs, fixeddofs)
 
     # Solving for displacements
     U[freedofs, 0] = spsolve(

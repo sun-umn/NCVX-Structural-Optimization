@@ -253,7 +253,7 @@ class MultiMaterialCNNModel(nn.Module):
         super().__init__()
         set_seed(random_seed)
         self.args = args
-        self.multiplier = 16
+        self.multiplier = 32
         print(kernel_size)
 
         # Update the convolutional filters for the expected
@@ -292,7 +292,7 @@ class MultiMaterialCNNModel(nn.Module):
 
         # Still the best initialization for the first layer
         nn.init.orthogonal_(self.dense.weight, gain=gain)
-        # nn.init.zeros_(self.dense.bias)
+        nn.init.zeros_(self.dense.bias)
 
         # Create the convoluational layers that will be used
         self.conv = nn.ModuleList()
@@ -312,21 +312,18 @@ class MultiMaterialCNNModel(nn.Module):
         offset_filters = dense_channels_tuple + offset_filters_tuple
 
         # Performed very well!
-        # kernel_sizes = [(5, 5), (5, 5), (7, 7), (9, 9), (9, 9)]
-        # kernel_sizes = [(5, 5), (5, 5), (7, 7), (9, 9), (11, 11)]
-        kernel_sizes = [(5, 5), (7, 7), (9, 9), (11, 11), (11, 11)]
-        # kernel_sizes = [(10, 10), (14, 14), (18, 18), (22, 22), (22, 22)]
-        # kernel_sizes = [(19, 19), (19, 19), (21, 21), (23, 23), (23, 23)]
+        kernel_sizes = [(5, 5), (5, 5), (7, 7), (9, 9), (9, 9)]
 
-        for resize, in_channels, out_channels in zip(
-            self.resizes, offset_filters, conv_filters
+        for resize, in_channels, out_channels, kernel_size in zip(
+            self.resizes, offset_filters, conv_filters, kernel_sizes
         ):
             convolution_layer = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
-                kernel_size=self.kernel_size,
+                kernel_size=kernel_size,
                 padding="same",
             )
+
             # This was the best initialization
             # TODO: Since we are using a sin activation layer I will add
             # the SIREN initialization
@@ -335,7 +332,7 @@ class MultiMaterialCNNModel(nn.Module):
                 mode="fan_in",
                 nonlinearity="leaky_relu",
             )
-            # nn.init.zeros_(convolution_layer.bias)
+            nn.init.zeros_(convolution_layer.bias)
 
             self.conv.append(convolution_layer)
             self.global_normalization.append(GlobalNormalization())

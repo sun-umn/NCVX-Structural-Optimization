@@ -3,7 +3,7 @@
 import os
 import pickle
 import warnings
-from typing import Tuple
+from typing import Any, Tuple
 
 # third party
 import click
@@ -33,7 +33,7 @@ from TOuNN.TOuNN import TopologyOptimizer
 warnings.filterwarnings('ignore')
 
 # Global variables
-CNN_FEATURES = (256, 128, 64, 32, 16)
+CNN_FEATURES = (256, 128, 64, 32)
 MODEL_CONFIGS = {
     'small': {
         'latent_size': 96,
@@ -49,6 +49,24 @@ MODEL_CONFIGS = {
         'latent_size': 96,
         'dense_channels': 24,
         'conv_filters': tuple(feature // 2 for feature in CNN_FEATURES),
+    },
+}
+
+MODEL_CONFIGS_V2 = {
+    'small': {
+        'latent_size': 96,
+        'dense_channels': 24,
+        'conv_filters': tuple(feature // 3 for feature in CNN_FEATURES),
+    },
+    'medium': {
+        'latent_size': 96,
+        'dense_channels': 24,
+        'conv_filters': tuple(feature // 2 for feature in CNN_FEATURES),
+    },
+    'large': {
+        'latent_size': 96,
+        'dense_channels': 24,
+        'conv_filters': tuple(feature for feature in CNN_FEATURES),
     },
 }
 
@@ -108,7 +126,7 @@ def calculate_mass_constraint(
     return mass_constraint.sum() / total_mass - 1.0
 
 
-def calculate_binary_constraint(design, mask, epsilon):
+def calculate_binary_constraint(design, mask, epsilon: float = 5e-4):
     """
     Function to compute the binary constraint
     """
@@ -127,7 +145,7 @@ def calculate_volume_constraint(design, mask, volume):
     return np.round(volume_constraint, decimals=5)
 
 
-def build_outputs(problem_name, outputs, mask, volume, requires_flip, epsilon=1e-3):
+def build_outputs(problem_name: str, outputs: dict[str, Any], epsilon: float = 5e-4):
     """
     From each of the methods we will have an outputs
     based on the number of trials. This function
@@ -154,52 +172,42 @@ def build_outputs(problem_name, outputs, mask, volume, requires_flip, epsilon=1e
 
     # final designs
     final_designs = outputs["designs"]
-    final_designs = final_designs[losses_indexes, :, :]
+    final_designs = final_designs[losses_indexes, :, :, :]
 
     # Get all final objects
-    best_final_design = final_designs[0, :, :]
+    best_final_design = final_designs[0, :, :, :].squeeze()
+    best_full_final_design = best_final_design
+
+    multiplier_list = []
+    for i in range(best_final_design.shape[0]):
+        channel_multiplier = np.ones_like(best_final_design[0, :, :]) * (i + 1)
+        multiplier_list.append(channel_multiplier)
+
+    multiplier = np.asarray(multiplier_list)
+    best_final_design = best_final_design * multiplier
+    best_final_design = best_final_design.sum(axis=0)
+
     # Compute the binary and volume constraints
-    binary_constraint = calculate_binary_constraint(
-        design=best_final_design,
-        mask=mask,
-        epsilon=epsilon,
-    )
+    binary_constraint_array = outputs["binary_constraint"][:, losses_indexes]
+    binary_constraint_values = pd.Series(binary_constraint_array[:, 0]).ffill()
+    binary_constraint = binary_constraint_values.values[-1]
 
     # volume constraint
-    volume_constraint = calculate_volume_constraint(
-        design=best_final_design,
-        mask=mask,
-        volume=volume,
-    )
-
-    if requires_flip:
-        if (
-            ("mbb" in problem_name)
-            or ("l_shape" in problem_name)
-            or ("cantilever" in problem_name)
-        ):
-            best_final_design = np.hstack(
-                [best_final_design[:, ::-1], best_final_design]
-            )
-
-        elif (
-            ("multistory" in problem_name)
-            or ("thin" in problem_name)
-            or ("michell" in problem_name)
-        ):
-            best_final_design = np.hstack(
-                [best_final_design, best_final_design[:, ::-1]] * 2
-            )
+    volume_constraint_array = outputs["volumes"][:, losses_indexes]
+    volume_constraint_values = pd.Series(volume_constraint_array[:, 0]).ffill()
+    volume_constraint = volume_constraint_values.values[-1]
 
     # last row, first column (-1, 0)
     best_score = np.round(losses_df.iloc[-1, 0], 2)
 
     # Create metrics
     metrics = {
-        'loss': outputs["losses"],
-        'volume_constraint': outputs['volumes'],
-        'binary_constraint': outputs['binary_constraint'],
-        'symmetry_constraint': outputs['symmetry_constraint'],
+        "best_final_full_design": best_full_final_design,
+        "loss": outputs["losses"],
+        "volume_constraint": outputs["volumes"],
+        "binary_constraint": outputs["binary_constraint"],
+        "x_symmetry_constraint": outputs["x_symmetry_constraint"],
+        "y_symmetry_constraint": outputs["y_symmetry_constraint"],
     }
 
     return best_final_design, best_score, binary_constraint, volume_constraint, metrics
@@ -387,7 +395,7 @@ def tounn_train_and_outputs(problem, requires_flip):
     fixed = args['fixdofs'].cpu().numpy()
 
     # Get epsilon value
-    epsilon = args['epsilon']
+    epsilon = args["epsilon"]
 
     # Get the mask for tounn problems
     tounn_mask = args['tounn_mask']
@@ -490,11 +498,6 @@ def tounn_train_and_outputs(problem, requires_flip):
 
     # Here will create a dict to save the losses
     metrics = {
-        'loss': topOpt.convergenceHistory[4],
-        'volume_constraint': topOpt.convergenceHistory[5],
-        'binary_constraint': topOpt.convergenceHistory[6],
-    }
-    metrics = {
         'loss': np.array(
             [value for _, _, _, _, value, _, _ in topOpt.convergenceHistory]
         ),
@@ -541,8 +544,8 @@ def mmtounn_train_and_outputs(
     symYAxis = False
 
     # Additional config
-    minEpochs = 50
-    maxEpochs = 1000
+    minEpochs = 20
+    maxEpochs = 1500
     penal = 1.0
     useSavedNet = False
     device = 'cpu'
@@ -705,14 +708,12 @@ def run_classical_mmto(
 
 @cli.command('run-multi-material-pipeline')
 @click.option('--problem_name', default='tip_cantilever_beam')
-def run_multi_material_pipeline(problem_name):
+def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
     """
     Function to run the multi-material pipeline
     """
     print(f'Problem Name = {problem_name}')
     device = torch.device('cpu')
-    first_stage_maxit = 5
-    # second_stage_maxit = 500
 
     # For testing we will run two experimentation trackers
     API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
@@ -732,7 +733,7 @@ def run_multi_material_pipeline(problem_name):
     # Will create directories for saving models
     save_path = os.path.join(
         '/home/jusun/dever120/NCVX-Neural-Structural-Optimization/results',
-        f'{wandb.run.id}',
+        f'{wandb.run.id}',  # type: ignore
     )
     if not os.path.exists(save_path):
         os.makedirs(save_path)
@@ -742,38 +743,27 @@ def run_multi_material_pipeline(problem_name):
 
     # Problem specifications
     if problem_name == 'tip_cantilever_beam':
-        nelx = 64
-        nely = 32
-        combined_frac = 0.6
+        # Setup for classical method
         e_materials = torch.tensor([0.0, 3.0, 2.0, 1.0], dtype=torch.double)
         material_density_weight = torch.tensor([0.0, 1.0, 0.7, 0.4])
+
         P = torch.tensor([1.0, 1.0, 1.0, 1.0])
         costfrac = 1.0
 
-        args = topo_api.multi_material_tip_cantilever_task(
-            nelx=nelx,
-            nely=nely,
-            e_materials=e_materials,
-            material_density_weight=material_density_weight,
-            combined_frac=combined_frac,
-        )
+        args = problems.multi_material_cantilever_beam()
 
     elif problem_name == 'bridge':
-        nelx = 128
-        nely = 64
-        combined_frac = 0.4
         e_materials = torch.tensor([0.0, 0.2, 0.6, 1.0], dtype=torch.double)
         material_density_weight = torch.tensor([0.0, 0.4, 0.7, 1.0])
+
         P = torch.tensor([1.0, 1.0, 1.0, 1.0])
         costfrac = 1.0
 
-        args = topo_api.multi_material_bridge_task(
-            nelx=nelx,
-            nely=nely,
-            e_materials=e_materials,
-            material_density_weight=material_density_weight,
-            combined_frac=combined_frac,
-        )
+        args = problems.multi_material_bridge()
+
+    nelx = args["nelx"]
+    nely = args["nely"]
+    combined_frac = args["combined_frac"]
 
     # Create the stiffness matrix
     ke = topo_physics.get_stiffness_matrix(
@@ -813,101 +803,51 @@ def run_multi_material_pipeline(problem_name):
     with open(cmmto_filepath, 'wb') as handle:
         pickle.dump(cmmto_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # Setup for our method
-    args['penal'] = 1.0
-    args['forces'] = torch.tensor(args['forces'].ravel())
-    args['fixdofs'] = torch.tensor(args['fixdofs'])
-    args['freedofs'] = torch.tensor(args['freedofs'])
+    print('Classical MMTO Completed! 🎉')
 
-    # After running Classical method we need to update e_materials
-    # and material_density_weight
-    e_materials = e_materials[1:]
-    material_density_weight = material_density_weight[1:]
-    args['e_materials'] = e_materials
-    args['material_density_weight'] = material_density_weight
+    # Setup for our method
+    e_materials = args["e_materials"]
+    material_density_weight = args["material_density_weight"]
+
+    # Reset some values back to torch tensors
+    args["forces"] = torch.tensor(args["forces"].ravel())
+    args["fixdofs"] = torch.tensor(args["fixdofs"])
+    args["freedofs"] = torch.tensor(args["freedofs"])
 
     # DIP Setup
-    conv_filters = (256, 128, 64, 32)
+    conv_filters = (256 // 3, 128 // 3, 64 // 3, 32 // 3)
     cnn_kwargs = {
-        'latent_size': 128,
-        'dense_channels': 32,
+        'latent_size': 96,
+        'dense_channels': 24,
         'kernel_size': (5, 5),
         'conv_filters': conv_filters,
     }
 
     # Trials and seeds
-    seeds = [1234, 1985]
-    for seed in seeds:
-        # Intialize random seed
-        utils.build_random_seed(seed)
-        cnn_kwargs['random_seed'] = seed
+    num_trials = 2
+    maxit = 2
+    outputs = train.train_pygranso_v2(
+        args=args,
+        device=device,
+        cnn_kwargs=cnn_kwargs,
+        num_trials=1,
+        maxit=maxit,
+    )
 
-        model = models.MultiMaterialCNNModel(args, **cnn_kwargs).to(
-            device=device, dtype=torch.double
-        )
+    ntopco_outputs = build_outputs(
+        problem_name=problem_name,
+        outputs=outputs,
+    )
 
-        # Calculate the initial compliance
-        model.eval()
-        with torch.no_grad():
-            (
-                initial_compliance,
-                x_phys,
-                _,
-            ) = topo_physics.calculate_multi_material_compliance(
-                model, ke, args, device, torch.double
-            )
+    print('NTO-PCO Completed! 🎉')
 
-        # Detach calculation and use it for scaling in PyGranso
-        initial_compliance = (
-            torch.ceil(initial_compliance.to(torch.float64).detach()) + 1.0
-        )
+    # Compute the final design and save to experiments
+    ntopco_filepath = os.path.join(save_path, 'mm-ntopco.pickle')
+    with open(ntopco_filepath, 'wb') as handle:
+        pickle.dump(ntopco_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-        # Train PyGranso MMTO - First Stage
-        # Setup the combined function for PyGranso
-        comb_fn = lambda model: train.multi_material_constraint_function(  # noqa
-            model,
-            initial_compliance,
-            ke,
-            args,
-            add_constraints=True,
-            device=device,
-            dtype=torch.double,
-        )
-
-        train.train_pygranso_mmto(
-            model=model, comb_fn=comb_fn, maxit=first_stage_maxit, device=device
-        )
-
-        # Get the final design
-        compliance, final_design, _ = topo_physics.calculate_multi_material_compliance(
-            model, ke, args, device, torch.double
-        )
-        final_design = final_design.detach().numpy()
-
-        # Compute mass constraint
-        ntopco_mass_constraint = calculate_mass_constraint(
-            design=final_design,
-            nelx=nelx,
-            nely=nely,
-            material_density_weight=material_density_weight,
-            combined_frac=combined_frac,
-        )
-
-        # TODO: Extract all of the relevant information
-        ntopco_outputs = {
-            'final_design': final_design,
-            'compliance': compliance,
-            'mass_constraint': ntopco_mass_constraint,
-            'material_density_weight': material_density_weight,
-            'nelx': nelx,
-            'nely': nely,
-            'cnn_kwargs': cnn_kwargs,
-        }
-
-        # Compute the final design and save to experiments
-        ntopco_filepath = os.path.join(save_path, f'ntopco-{seed}.pickle')
-        with open(ntopco_filepath, 'wb') as handle:
-            pickle.dump(ntopco_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    for index, seed in enumerate(range(0, num_trials)):
+        seed = (seed + 1) * 10
 
         # Run MM-TOuNN Pipeline
         topOpt, mmtounn_final_design = mmtounn_train_and_outputs(
@@ -919,7 +859,6 @@ def run_multi_material_pipeline(problem_name):
             combined_frac=combined_frac,
             seed=seed,
         )
-        print('MM-TOuNN Completed! 🎉')
 
         # Final compliance
         mmtounn_compliance = topOpt.convergenceHistory[-1][-1]
@@ -947,15 +886,22 @@ def run_multi_material_pipeline(problem_name):
         with open(mmtounn_filepath, 'wb') as handle:
             pickle.dump(mmtounn_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+    print('MM-TOuNN Completed! 🎉')
+
     print('Multi-Material Pipeline Completed! 🏆')
 
 
-@cli.command('run-multi-structure-pipeline-v2')
+@cli.command('run-multi-structure-pipeline')
 @click.option('--model_size', default='medium')
 @click.option('--problem_name', default='mbb_beam_96x32_0.5')
 @click.option('--kernel_size', default="12,12")
 @click.option('--num_trials', default=1)
-def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_trials):
+def run_multi_structure_pipeline(
+    model_size: str = 'small',
+    problem_name: str = 'mbb_beam_192x64_0.5',
+    kernel_size: Tuple[int, int] = (5, 5),
+    num_trials: int = 1,
+) -> None:
     """
     Task that will build out multiple structures and compare
     performance against known benchmarks.
@@ -964,10 +910,10 @@ def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_t
     device = utils.get_devices()
 
     # Max iterations for PyGranso
-    maxit = 1
+    maxit = 5000
 
     # Max iterations for Google-DIP
-    max_iterations = 2
+    max_iterations = 200
 
     # For testing, we will run two experimentation trackers
     API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
@@ -977,9 +923,7 @@ def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_t
     wandb.login(key=API_KEY)
 
     # CNN kwargs
-    kernel_size_tuple = tuple(int(i) for i in kernel_size.split(','))
-    cnn_kwargs = MODEL_CONFIGS[model_size]
-    cnn_kwargs['kernel_size'] = kernel_size_tuple
+    cnn_kwargs = MODEL_CONFIGS_V2[model_size]
 
     # Initalize wandb
     trial_tag = 'single'
@@ -998,7 +942,6 @@ def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_t
             'latent_size': cnn_kwargs['latent_size'],
             'dense_channels': cnn_kwargs['dense_channels'],
             'conv_filters': cnn_kwargs['conv_filters'],
-            'kernel_size': kernel_size,
         },
     )
 
@@ -1006,7 +949,7 @@ def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_t
     # output data
     save_path = os.path.join(
         '/home/jusun/dever120/NCVX-Neural-Structural-Optimization/results',
-        f'{wandb.run.id}',
+        f'{wandb.run.id}',  # type: ignore
     )
     if not os.path.exists(save_path):
         os.makedirs(save_path)
@@ -1022,17 +965,8 @@ def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_t
             f'cnn_kwargs = {cnn_kwargs}'
         )
 
-    # PyGranso function
-    comb_fn = train.volume_constrained_structural_optimization_function
-
     # Build the problems for pygranso and google
     PYGRANSO_PROBLEMS_BY_NAME = problems.build_problems_by_name(device=device)  # noqa
-    PROBLEM_CONFIG = PROBLEM_CONFIGS[problem_name]  # noqa
-    include_symmetry = PROBLEM_CONFIG['include_symmetry']
-
-    # Old configs that need to be refactored
-    requires_flip = False
-    total_frames = 1
 
     # Build structure
     print(f"Building structure: {problem_name}")
@@ -1040,33 +974,27 @@ def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_t
 
     # Get volume assignment
     args = topo_api.specified_task(problem, device=device)
-    volume = args["volfrac"]
 
+    # Variables
+    requires_flip = False
+    volume = args["volfrac"]
     nely = int(args["nely"])
     nelx = int(args["nelx"])
     mask = (torch.broadcast_to(args["mask"], (nely, nelx)) > 0).cpu().numpy()
 
     # Build the structure with pygranso
-    outputs = train.train_pygranso(
-        problem=problem,
+    outputs = train.train_pygranso_v2(
+        args=args,
         device=device,
-        pygranso_combined_function=comb_fn,
-        requires_flip=requires_flip,
-        total_frames=total_frames,
         cnn_kwargs=cnn_kwargs,
         num_trials=num_trials,
         maxit=maxit,
-        include_symmetry=include_symmetry,
     )
 
-    # Build the outputs
-    # NTO-PCO
+    # Build NTO-PCO outputs
     pygranso_outputs = build_outputs(
         problem_name=problem_name,
         outputs=outputs,
-        mask=mask,
-        volume=volume,
-        requires_flip=requires_flip,
     )
 
     # TOuNN Outputs
@@ -1443,8 +1371,8 @@ def test_multi_material_cantilever():
             ax.set_xticks([])
             ax.set_yticks([])
 
-        except:
-            pass
+        except Exception as e:
+            print(e)
 
     path = os.path.join(save_path, 'multi-cantilever-results.png')
     fig.savefig(path)

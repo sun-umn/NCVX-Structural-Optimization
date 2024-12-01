@@ -104,9 +104,11 @@ def multi_material_constraint_function_v2(
     initial_void_compliance,
     ke,
     args,
+    compliance_list,
     volume_constraint_list,
     discrete_constraint_list,
     x_symmetry_constraint_list,
+    y_symmetry_constraint_list,
     device,
     dtype,
 ):
@@ -147,6 +149,7 @@ def multi_material_constraint_function_v2(
     f_void = 1.0 / initial_void_compliance * void_compliance
 
     ce = pygransoStruct()
+    ci = None
 
     # Compute the mass constraint
     mass_constraint = torch.zeros(num_materials - 1)
@@ -157,6 +160,7 @@ def multi_material_constraint_function_v2(
     ce.c1 = mass_constraint  # noqa
 
     # Compute the discrete (binary) constraint
+    epsilon = args["epsilon"]
     discrete_constraint = 0
     for i in range(num_materials):
         material_channel_values = x_phys[:, i].flatten()
@@ -165,7 +169,7 @@ def multi_material_constraint_function_v2(
         )
         discrete_constraint += discrete_constraint_value / pixel_total
 
-    discrete_constraint = discrete_constraint - 5e-4
+    discrete_constraint = discrete_constraint - epsilon
     ce.c2 = discrete_constraint
 
     # Compute symmetry values
@@ -179,8 +183,8 @@ def multi_material_constraint_function_v2(
         # Each material channel should have symmetry
         for i in range(num_materials):
             channel_values = logits[i, :, :]
-            channel_left = channel_values[:midpoint, :]
-            channel_right = torch.flip(channel_values[-midpoint:, :], [1])
+            channel_left = channel_values[:, :midpoint]
+            channel_right = torch.flip(channel_values[:, -midpoint:], [1])
             x_symmetry_constraint_value = (
                 torch.norm(channel_left - channel_right, p=1) / pixel_total
             )
@@ -188,31 +192,61 @@ def multi_material_constraint_function_v2(
 
         ce.c3 = x_symmetry_constraint
 
-    # Add constraint for void channel
-    ci = pygransoStruct()
+    y_symmetry_constraint = torch.tensor(0.0)
+    if args["y_symmetry"]:
 
+        # Get the midpoint of the design grid
+        y_size = logits.shape[1]
+        midpoint = y_size // 2
+
+        # Each material channel should have symmetry
+        for i in range(num_materials):
+            channel_values = logits[i, :, :]
+            channel_top = channel_values[:midpoint, :]
+            channel_bottom = torch.flip(channel_values[-midpoint:, :], [0])
+            y_symmetry_constraint_value = (
+                torch.norm(channel_top - channel_bottom, p=1) / pixel_total
+            )
+            y_symmetry_constraint += y_symmetry_constraint_value
+
+        ce.c4 = y_symmetry_constraint
+
+    # NOTE: I ran this with the inequality constraint for
+    # single material and it seems that the inequality constraint
+    # has a stronger preference than equality
     void_mass = (1 - x_phys[:, 0]).mean()
-    void_constraint = (void_mass / args['combined_frac']) - 1.0
+    void_constraint = (void_mass / args['volfrac']) - 1.0
 
-    ci.c1 = void_constraint - 0.05
-    ci.c2 = -void_constraint + 0.05
+    if num_materials > 2:
+        ci = pygransoStruct()
 
-    # ci = None
+        ci.c1 = void_constraint - 0.05
+        ci.c2 = -void_constraint + 0.05
+
+    else:
+        ce.c5 = void_constraint
 
     print(
         compliance.item(),
         mass_constraint.item(),
         discrete_constraint.item(),
         x_symmetry_constraint.item(),
+        y_symmetry_constraint.item(),
         void_constraint.item(),
+        args['x_symmetry'],
+        args['y_symmetry'],
     )
 
     # Save all calculations for analysis
+    compliance_list.append(compliance.item())
     volume_constraint_list.append(mass_constraint.item())
     discrete_constraint_list.append(discrete_constraint.item())
 
     if args['x_symmetry']:
         x_symmetry_constraint_list.append(x_symmetry_constraint.item())
+
+    if args['y_symmetry']:
+        y_symmetry_constraint_list.append(y_symmetry_constraint.item())
 
     # Let's try and clear as much stuff as we can to preserve memory
     del x_phys, logits, mask, ke
@@ -269,7 +303,7 @@ def volume_constrained_structural_optimization_function(
     ce.c1 = volume_constraint  # noqa
 
     # Directly handle the binary constraint
-    epsilon = args["epsilon"]
+    epsilon = 1e-3
     binary_constraint = (
         torch.norm(x_phys[mask] * (1 - x_phys[mask]), p=1) / total_elements
     ) - epsilon
@@ -546,6 +580,7 @@ def train_pygranso_v2(
     trials_volume_constraint = np.full((maxit + 1, num_trials), np.nan)
     trials_discrete_constraint = np.full((maxit + 1, num_trials), np.nan)
     trials_x_symmetry_constraint = np.full((maxit + 1, num_trials), np.nan)
+    trials_y_symmetry_constraint = np.full((maxit + 1, num_trials), np.nan)
 
     # Create the stiffness matrix
     ke = topo_physics.get_stiffness_matrix(
@@ -555,8 +590,9 @@ def train_pygranso_v2(
     ).double()
 
     for index, seed in enumerate(range(0, num_trials)):
+        seed = (seed + 1) * 10
         # Set seeds for reproducibility
-        models.set_seed(seed * 10)
+        models.set_seed(seed)
         np.random.seed(seed)
         torch.random.manual_seed(seed)
         torch.cuda.manual_seed(seed)
@@ -614,9 +650,11 @@ def train_pygranso_v2(
 
         # Combined function lists. We use these lists to save information
         # during training.
+        compliance_list: List[float] = []
         volume_constraint_list: List[float] = []
         discrete_constraint_list: List[float] = []
         x_symmetry_constraint_list: List[float] = []
+        y_symmetry_constraint_list: List[float] = []
 
         # initialize the pygranso combined function
         combined_fn = lambda model: multi_material_constraint_function_v2(  # noqa
@@ -625,9 +663,11 @@ def train_pygranso_v2(
             initial_void_compliance,
             ke,
             args,
-            volume_constraint_list,
-            discrete_constraint_list,
-            x_symmetry_constraint_list,
+            compliance_list,  # noqa
+            volume_constraint_list,  # noqa
+            discrete_constraint_list,  # noqa
+            x_symmetry_constraint_list,  # noqa
+            y_symmetry_constraint_list,  # noqa
             device,
             dtype,
         )
@@ -663,6 +703,8 @@ def train_pygranso_v2(
 
         # Get iterative values
         log = get_log_fn()
+        log_f = pd.Series(log.f) * initial_compliance.cpu().numpy()
+        len_log_f = len(log_f)
 
         # Get indexes of iterative values from pygranso
         indexes = (pd.Series(log.fn_evals).cumsum() - 1).values.tolist()
@@ -687,28 +729,34 @@ def train_pygranso_v2(
 
         # Get the final compliance
         final_compliance = soln.final.f * initial_compliance.item()
-        log_compliance = pd.Series(log.f) * initial_compliance.item()
 
         # Save all trials data
         trials_designs[index, :, :, :] = final_design
-        trials_losses[: len(log_compliance), index] = log_compliance.values
+
+        compliance_array = np.asarray(compliance_list)
+        trials_losses[:len_log_f, index] = compliance_array[indexes]
 
         volume_constraint_array = np.asarray(volume_constraint_list)
-        trials_volume_constraint[
-            : len(log_compliance), index
-        ] = volume_constraint_array[indexes]
+        trials_volume_constraint[:len_log_f, index] = volume_constraint_array[indexes]
 
         discrete_constraint_array = np.asarray(discrete_constraint_list)
-        trials_discrete_constraint[
-            : len(log_compliance), index
-        ] = discrete_constraint_array[indexes]
+        trials_discrete_constraint[:len_log_f, index] = discrete_constraint_array[
+            indexes
+        ]
 
         x_symmetry_constraint_array = np.zeros(1)
         if args['x_symmetry']:
             x_symmetry_constraint_array = np.asarray(x_symmetry_constraint_list)
             trials_x_symmetry_constraint[
-                : len(log_compliance), index
+                :len_log_f, index
             ] = x_symmetry_constraint_array[indexes]
+
+        y_symmetry_constraint_array = np.zeros(1)
+        if args["y_symmetry"]:
+            y_symmetry_constraint_array = np.asarray(y_symmetry_constraint_list)
+            trials_y_symmetry_constraint[
+                :len_log_f, index
+            ] = y_symmetry_constraint_array[indexes]
 
         # Delete all variables for the next trial
         del (
@@ -722,13 +770,15 @@ def train_pygranso_v2(
             log,
             final_design,
             final_compliance,
-            log_compliance,
+            compliance_list,
             volume_constraint_array,
             volume_constraint_list,
             discrete_constraint_array,
             discrete_constraint_list,
             x_symmetry_constraint_array,
             x_symmetry_constraint_list,
+            y_symmetry_constraint_array,
+            y_symmetry_constraint_list,
         )
         gc.collect()
         torch.cuda.empty_cache()
@@ -739,6 +789,7 @@ def train_pygranso_v2(
         "volumes": trials_volume_constraint,
         "binary_constraint": trials_discrete_constraint,
         "x_symmetry_constraint": trials_x_symmetry_constraint,
+        "y_symmetry_constraint": trials_y_symmetry_constraint,
     }
 
     return outputs
