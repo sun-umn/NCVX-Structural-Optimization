@@ -17,7 +17,7 @@
 """A suite of topology optimization problems."""
 # third party
 import dataclasses
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 import skimage
@@ -52,7 +52,8 @@ class Problem:
     normals: torch.Tensor  # noqa
     forces: torch.Tensor  # noqa
     density: float  # noqa
-    epsilon: float  # noqa
+    x_symmetry: bool  # noqa
+    y_symmetry: bool  # noqa
     mask: Union[torch.Tensor, float] = 1  # noqa
     tounn_mask: Union[None, Dict[str, int]] = None
     name: Optional[str] = None  # noqa
@@ -83,11 +84,11 @@ class Problem:
         )
 
 
+# Single-material Structures
 def mbb_beam(
     width=60,
     height=20,
     density=0.5,
-    epsilon=1e-3,
     device=DEFAULT_DEVICE,
     dtype=DEFAULT_DTYPE,
 ):
@@ -99,65 +100,69 @@ def mbb_beam(
     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
     forces[0, 0, Y] = -1
 
-    return Problem(normals, forces, density, epsilon)
+    # Symmetry requirements
+    x_symmetry = False
+    y_symmetry = False
+
+    return Problem(normals, forces, density, x_symmetry, y_symmetry)
 
 
-def mbb_beam_with_circular_non_design_region(
-    width=60,
-    height=20,
-    density=0.5,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Textbook beam example."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, -1, Y] = 1
-    normals[0, :, X] = 1
+# def mbb_beam_with_circular_non_design_region(
+#     width=60,
+#     height=20,
+#     density=0.5,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Textbook beam example."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, -1, Y] = 1
+#     normals[0, :, X] = 1
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[0, 0, Y] = -1
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[0, 0, Y] = -1
 
-    x_center = width // 4
-    y_center = height // 2
-    radius = y_center // 2
+#     x_center = width // 4
+#     y_center = height // 2
+#     radius = y_center // 2
 
-    # Initialize the grid of zeros
-    mask = np.ones((height, width))
+#     # Initialize the grid of zeros
+#     mask = np.ones((height, width))
 
-    # Iterate over each point in the grid
-    for y in range(height):
-        for x in range(width):
-            # Calculate the distance from the center
-            distance = np.sqrt((x - x_center) ** 2 + (y - y_center) ** 2)
+#     # Iterate over each point in the grid
+#     for y in range(height):
+#         for x in range(width):
+#             # Calculate the distance from the center
+#             distance = np.sqrt((x - x_center) ** 2 + (y - y_center) ** 2)
 
-            # If the distance is within the radius, set the value to 1
-            if distance <= radius:
-                mask[y, x] = 0
+#             # If the distance is within the radius, set the value to 1
+#             if distance <= radius:
+#                 mask[y, x] = 0
 
-    mask = torch.tensor(mask)
-    mask = mask.to(device=device, dtype=dtype)
+#     mask = torch.tensor(mask)
+#     mask = mask.to(device=device, dtype=dtype)
 
-    return Problem(normals, forces, density, epsilon, mask)
+#     return Problem(normals, forces, density, epsilon, mask)
 
 
-def cantilever_beam_full(
-    width=60,
-    height=60,
-    density=0.5,
-    force_position=0,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Cantilever supported everywhere on the left"""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[0, :, :] = 1.0
+# def cantilever_beam_full(
+#     width=60,
+#     height=60,
+#     density=0.5,
+#     force_position=0,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Cantilever supported everywhere on the left"""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[0, :, :] = 1.0
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[-1, round((1 - force_position) * height), Y] = -1
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[-1, round((1 - force_position) * height), Y] = -1
 
-    return Problem(normals, forces, density, epsilon)
+#     return Problem(normals, forces, density, epsilon)
 
 
 def cantilever_beam_two_point(
@@ -166,7 +171,6 @@ def cantilever_beam_two_point(
     density=0.5,
     support_position=0.25,
     force_position=0.5,
-    epsilon=1e-3,
     device=DEFAULT_DEVICE,
     dtype=DEFAULT_DTYPE,
 ):
@@ -178,119 +182,123 @@ def cantilever_beam_two_point(
     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
     forces[-1, round((1 - force_position) * height), Y] = -1
 
-    return Problem(normals, forces, density, epsilon)
+    # Symmetry requirements
+    x_symmetry = False
+    y_symmetry = True
+
+    return Problem(normals, forces, density, x_symmetry, y_symmetry)
 
 
-def pure_bending_moment(
-    width=60,
-    height=60,
-    density=0.5,
-    epsilon=1e-3,
-    support_position=0.45,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Pure bending forces on a beam."""
-    # Figure 28 from
-    # http://naca.central.cranfield.ac.uk/reports/arc/rm/3303.pdf
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, :, X] = 1
+# def pure_bending_moment(
+#     width=60,
+#     height=60,
+#     density=0.5,
+#     epsilon=1e-3,
+#     support_position=0.45,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Pure bending forces on a beam."""
+#     # Figure 28 from
+#     # http://naca.central.cranfield.ac.uk/reports/arc/rm/3303.pdf
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, :, X] = 1
 
-    # for numerical stability, fix y forces here at 0
-    normals[0, round(height * (1 - support_position)), Y] = 1
-    normals[0, round(height * support_position), Y] = 1
+#     # for numerical stability, fix y forces here at 0
+#     normals[0, round(height * (1 - support_position)), Y] = 1
+#     normals[0, round(height * support_position), Y] = 1
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[0, round(height * (1 - support_position)), X] = 1
-    forces[0, round(height * support_position), X] = -1
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[0, round(height * (1 - support_position)), X] = 1
+#     forces[0, round(height * support_position), X] = -1
 
-    return Problem(normals, forces, density, epsilon)
-
-
-def michell_centered_both(
-    width=32,
-    height=32,
-    density=0.5,
-    position=0.05,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A single force down at the center, with support from the side."""
-    # https://en.wikipedia.org/wiki/Michell_structures#Examples
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[round(position * width), round(height / 2), Y] = 1
-    normals[-1, :, X] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[-1, round(height / 2), Y] = -1
-
-    return Problem(normals, forces, density, epsilon)
+#     return Problem(normals, forces, density, epsilon)
 
 
-def michell_centered_below(
-    width=32,
-    height=32,
-    density=0.5,
-    position=0.25,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A single force down at the center, with support from the side below."""
-    # https://en.wikipedia.org/wiki/Michell_structures#Examples
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[round(position * width), 0, Y] = 1
-    normals[-1, :, X] = 1
+# def michell_centered_both(
+#     width=32,
+#     height=32,
+#     density=0.5,
+#     position=0.05,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A single force down at the center, with support from the side."""
+#     # https://en.wikipedia.org/wiki/Michell_structures#Examples
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[round(position * width), round(height / 2), Y] = 1
+#     normals[-1, :, X] = 1
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[-1, 0, Y] = -1
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[-1, round(height / 2), Y] = -1
 
-    return Problem(normals, forces, density, epsilon)
-
-
-def michell_centered_top(
-    width=32,
-    height=32,
-    density=0.5,
-    position=0.25,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A single force down at the center, with support from the side below."""
-    # https://en.wikipedia.org/wiki/Michell_structures#Examples
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, -1, X] = 1
-    normals[-1, -1, Y] = 1
-    normals[0, -1, X] = 1
-    normals[0, -1, Y] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[round(width // 2), 0, Y] = -1
-
-    return Problem(normals, forces, density, epsilon)
+#     return Problem(normals, forces, density, epsilon)
 
 
-def ground_structure(
-    width=32,
-    height=32,
-    density=0.5,
-    force_position=0.5,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """An overhanging bridge like structure holding up two weights."""
-    # https://link.springer.com/content/pdf/10.1007%2Fs00158-010-0557-z.pdf
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, :, X] = 1
-    normals[0, -1, :] = 1
+# def michell_centered_below(
+#     width=32,
+#     height=32,
+#     density=0.5,
+#     position=0.25,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A single force down at the center, with support from the side below."""
+#     # https://en.wikipedia.org/wiki/Michell_structures#Examples
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[round(position * width), 0, Y] = 1
+#     normals[-1, :, X] = 1
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[round(force_position * height), -1, Y] = -1
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[-1, 0, Y] = -1
 
-    return Problem(normals, forces, density, epsilon)
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def michell_centered_top(
+#     width=32,
+#     height=32,
+#     density=0.5,
+#     position=0.25,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A single force down at the center, with support from the side below."""
+#     # https://en.wikipedia.org/wiki/Michell_structures#Examples
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, -1, X] = 1
+#     normals[-1, -1, Y] = 1
+#     normals[0, -1, X] = 1
+#     normals[0, -1, Y] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[round(width // 2), 0, Y] = -1
+
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def ground_structure(
+#     width=32,
+#     height=32,
+#     density=0.5,
+#     force_position=0.5,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """An overhanging bridge like structure holding up two weights."""
+#     # https://link.springer.com/content/pdf/10.1007%2Fs00158-010-0557-z.pdf
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, :, X] = 1
+#     normals[0, -1, :] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[round(force_position * height), -1, Y] = -1
+
+#     return Problem(normals, forces, density, epsilon)
 
 
 def l_shape(
@@ -314,6 +322,9 @@ def l_shape(
     mask = torch.ones((width, height)).to(device=device, dtype=dtype)
     mask[round(height * aspect) :, : round(width * (1 - aspect))] = 0  # noqa
 
+    # Mask needs to be transposed
+    mask = mask.t()
+
     # For TOuNN
     min_x = round(height * aspect)
     max_x = height
@@ -322,146 +333,150 @@ def l_shape(
 
     tounn_mask = {'x>': min_x, 'x<': max_x, 'y>': min_y, 'y<': max_y}
 
-    return Problem(normals, forces, density, epsilon, mask.T, tounn_mask)
+    # Symmetry requirement
+    x_symmetry = False
+    y_symmetry = False
+
+    return Problem(normals, forces, density, x_symmetry, y_symmetry, mask, tounn_mask)
 
 
-def crane(
-    width=32,
-    height=32,
-    density=0.3,
-    aspect=0.5,
-    force_position=0.9,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A crane supporting a downward force, anchored on the left."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, :] = 1
+# def crane(
+#     width=32,
+#     height=32,
+#     density=0.3,
+#     aspect=0.5,
+#     force_position=0.9,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A crane supporting a downward force, anchored on the left."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, :] = 1
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[round(force_position * width), round(1 - aspect * height), Y] = -1
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[round(force_position * width), round(1 - aspect * height), Y] = -1
 
-    mask = torch.ones((width, height)).to(device=device, dtype=dtype)
-    # the extra +2 ensures that entire region in the vicinity of the force can be
-    # be designed; otherwise we get outrageously high values for the compliance.
-    mask[round(aspect * width) :, round(height * aspect) + 2 :] = 0  # noqa
+#     mask = torch.ones((width, height)).to(device=device, dtype=dtype)
+#     # the extra +2 ensures that entire region in the vicinity of the force can be
+#     # be designed; otherwise we get outrageously high values for the compliance.
+#     mask[round(aspect * width) :, round(height * aspect) + 2 :] = 0  # noqa
 
-    return Problem(normals, forces, density, epsilon, mask.T)
-
-
-def tower(
-    width=32,
-    height=32,
-    density=0.5,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A rather boring structure supporting a single point from the ground."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, Y] = 1
-    normals[0, :, X] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[0, 0, Y] = -1
-    return Problem(normals, forces, density, epsilon)
+#     return Problem(normals, forces, density, epsilon, mask.T)
 
 
-def center_support(
-    width=32,
-    height=32,
-    density=0.3,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Support downward forces from the top from the single point."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, -1, Y] = 1
-    normals[-1, :, X] = 1
+# def tower(
+#     width=32,
+#     height=32,
+#     density=0.5,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A rather boring structure supporting a single point from the ground."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, Y] = 1
+#     normals[0, :, X] = 1
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, 0, Y] = -1 / width
-    return Problem(normals, forces, density, epsilon)
-
-
-def column(
-    width=32,
-    height=32,
-    density=0.3,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Support downward forces from the top across a finite width."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, Y] = 1
-    normals[-1, :, X] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, 0, Y] = -1 / width
-    return Problem(normals, forces, density, epsilon)
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[0, 0, Y] = -1
+#     return Problem(normals, forces, density, epsilon)
 
 
-def roof(
-    width=32,
-    height=32,
-    density=0.5,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Support downward forces from the top with a repeating structure."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[0, :, X] = 1
-    normals[-1, :, X] = 1
-    normals[:, -1, Y] = 1
+# def center_support(
+#     width=32,
+#     height=32,
+#     density=0.3,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Support downward forces from the top from the single point."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, -1, Y] = 1
+#     normals[-1, :, X] = 1
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, 0, Y] = -1 / width
-    return Problem(normals, forces, density, epsilon)
-
-
-def causeway_bridge(
-    width=60,
-    height=20,
-    density=0.3,
-    deck_level=1,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A bridge supported by columns at a regular interval."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, -1, Y] = 1
-    normals[-1, :, X] = 1
-    normals[0, :, X] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, round(height * (1 - deck_level)), Y] = -1 / width
-    return Problem(normals, forces, density, epsilon)
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, 0, Y] = -1 / width
+#     return Problem(normals, forces, density, epsilon)
 
 
-def two_level_bridge(
-    width=32,
-    height=32,
-    density=0.3,
-    deck_height=0.2,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A causeway bridge with two decks."""
-    normals = torch.zeros((width + 1, width + 1, 2)).to(device=device, dtype=dtype)
-    normals[0, -1, :] = 1
-    normals[0, :, X] = 1
-    normals[-1, :, X] = 1
+# def column(
+#     width=32,
+#     height=32,
+#     density=0.3,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Support downward forces from the top across a finite width."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, Y] = 1
+#     normals[-1, :, X] = 1
 
-    forces = torch.zeros((width + 1, width + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, round(height * (1 - deck_height) / 2), :] = -1 / (2 * width)
-    forces[:, round(height * (1 + deck_height) / 2), :] = -1 / (2 * width)
-    return Problem(normals, forces, density, epsilon)
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, 0, Y] = -1 / width
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def roof(
+#     width=32,
+#     height=32,
+#     density=0.5,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Support downward forces from the top with a repeating structure."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[0, :, X] = 1
+#     normals[-1, :, X] = 1
+#     normals[:, -1, Y] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, 0, Y] = -1 / width
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def causeway_bridge(
+#     width=60,
+#     height=20,
+#     density=0.3,
+#     deck_level=1,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A bridge supported by columns at a regular interval."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, -1, Y] = 1
+#     normals[-1, :, X] = 1
+#     normals[0, :, X] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, round(height * (1 - deck_level)), Y] = -1 / width
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def two_level_bridge(
+#     width=32,
+#     height=32,
+#     density=0.3,
+#     deck_height=0.2,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A causeway bridge with two decks."""
+#     normals = torch.zeros((width + 1, width + 1, 2)).to(device=device, dtype=dtype)
+#     normals[0, -1, :] = 1
+#     normals[0, :, X] = 1
+#     normals[-1, :, X] = 1
+
+#     forces = torch.zeros((width + 1, width + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, round(height * (1 - deck_height) / 2), :] = -1 / (2 * width)
+#     forces[:, round(height * (1 + deck_height) / 2), :] = -1 / (2 * width)
+#     return Problem(normals, forces, density, epsilon)
 
 
 def suspended_bridge(
@@ -470,7 +485,6 @@ def suspended_bridge(
     density=0.3,
     span_position=0.2,
     anchored=False,
-    epsilon=1e-3,
     device=DEFAULT_DEVICE,
     dtype=DEFAULT_DTYPE,
 ):
@@ -483,238 +497,308 @@ def suspended_bridge(
 
     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
     forces[:, -1, Y] = -1 / width
-    return Problem(normals, forces, density, epsilon)
+
+    # Symmetry requirments
+    x_symmetry = False
+    y_symmetry = False
+
+    return Problem(normals, forces, density, x_symmetry, y_symmetry)
 
 
-def canyon_bridge(
-    width=60,
-    height=20,
-    density=0.3,
-    deck_level=1,
-    epsilon=1e-3,
+# def canyon_bridge(
+#     width=60,
+#     height=20,
+#     density=0.3,
+#     deck_level=1,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A bridge embedded in a canyon, without side supports."""
+#     deck_height = round(height * (1 - deck_level))
+
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, deck_height:, :] = 1
+#     normals[0, :, X] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, deck_height, Y] = -1 / width
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def multistory_building(
+#     width=32,
+#     height=32,
+#     density=0.3,
+#     interval=16,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A multi-story building, supported from the ground."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, Y] = 1
+#     normals[-1, :, X] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, ::interval, Y] = -1 / width
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def thin_support_bridge(
+#     width=32,
+#     height=32,
+#     density=0.25,
+#     design_width=0.25,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """
+#     A bridge supported from below with fixed width supports.
+#     """
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, Y] = 1
+#     normals[0, :, X] = 1
+#     normals[-1, :, X] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, 0, Y] = -1 / width
+
+#     mask = torch.ones((width, height)).to(device=device, dtype=dtype)
+#     mask[
+#         -round(width * (1 - design_width)) :,
+#         : round(height * (1 - design_width)),  # noqa
+#     ] = 0  # noqa
+
+#     return Problem(normals, forces, density, epsilon, mask)
+
+
+# def drawbridge(
+#     width=32,
+#     height=32,
+#     density=0.25,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A bridge supported from above on the left."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[0, :, :] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[:, -1, Y] = -1 / width
+
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def hoop(
+#     width=32,
+#     height=32,
+#     density=0.25,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Downward forces in a circle, supported from the ground."""
+#     if 2 * width != height:
+#         raise ValueError("hoop must be circular")
+
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[-1, :, X] = 1
+#     normals[:, -1, Y] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     i, j, value = skimage.draw.circle_perimeter_aa(
+#         width, width, width, forces.shape[:2]
+#     )
+#     value = torch.tensor(value).to(device=device, dtype=dtype)
+#     forces[i, j, Y] = -value / (2 * np.pi * width)
+
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def multipoint_circle(
+#     width=140,
+#     height=140,
+#     density=0.333,
+#     radius=6 / 7,
+#     weights=(1, 0, 0, 0, 0, 0),
+#     num_points=12,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Various load scenarios at regular points in a circle points."""
+#     # From: http://www2.mae.ufl.edu/mdo/Papers/5219.pdf
+#     # Note: currently unused in our test suite only because the optimization
+#     # problems from the paper are defined based on optimizing for compliance
+#     # averaged over multiple force scenarios.
+#     c_x = width // 2
+#     c_y = height // 2
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[c_x - 1 : c_x + 2, c_y - 1 : c_y + 2, :] = 1  # noqa
+#     assert normals.sum() == 18
+
+#     c1, c2, c3, c4, c_x0, c_y0 = weights
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     for position in range(num_points):
+#         x = radius * c_x * np.sin(2 * np.pi * position / num_points)
+#         y = radius * c_y * np.cos(2 * np.pi * position / num_points)
+#         i = int(round(c_x + x))
+#         j = int(round(c_y + y))
+#         forces[i, j, X] = +c1 * y + c2 * x + c3 * y + c4 * x + c_x0
+#         forces[i, j, Y] = -c1 * x + c2 * y + c3 * x - c4 * y + c_y0
+
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def dam(
+#     width=32,
+#     height=32,
+#     density=0.5,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Support horizitonal forces, proportional to depth."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, X] = 1
+#     normals[:, -1, Y] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     forces[0, :, X] = 2 * torch.arange(1, height + 2) / height**2
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def ramp(
+#     width=32,
+#     height=32,
+#     density=0.25,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """Support downward forces on a ramp."""
+#     return staircase(
+#         width=width, height=height, density=density, epsilon=epsilon, num_stories=1
+#     )
+
+
+# def staircase(
+#     width=32,
+#     height=32,
+#     density=0.25,
+#     num_stories=2,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A ramp that zig-zags upward, supported from the ground."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, :] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     for story in range(num_stories):
+#         parity = story % 2
+#         start_coordinates = (0, (story + parity) * height // num_stories)
+#         stop_coordiates = (width, (story + 1 - parity) * height // num_stories)
+#         i, j, value = skimage.draw.line_aa(*start_coordinates, *stop_coordiates)
+
+#         value = torch.tensor(value).to(device=device, dtype=dtype)
+#         forces[i, j, Y] = torch.minimum(forces[i, j, Y], -value / (width * num_stories))
+
+#     return Problem(normals, forces, density, epsilon)
+
+
+# def staggered_points(
+#     width=32,
+#     height=32,
+#     density=0.3,
+#     interval=16,
+#     break_symmetry=False,
+#     epsilon=1e-3,
+#     device=DEFAULT_DEVICE,
+#     dtype=DEFAULT_DTYPE,
+# ):
+#     """A staggered grid of points with downward forces, supported from below."""
+#     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     normals[:, -1, Y] = 1
+#     normals[0, :, X] = 1
+#     normals[-1, :, X] = 1
+
+#     forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
+#     f = interval**2 / (width * height)
+#     # intentionally break horizontal symmetry?
+#     forces[interval // 2 + int(break_symmetry) :: interval, ::interval, Y] = -f  # noqa
+#     forces[int(break_symmetry) :: interval, interval // 2 :: interval, Y] = -f  # noqa
+#     return Problem(normals, forces, density, epsilon)
+
+
+# Multi-material Structures
+def multi_material_cantilever_beam(
+    width: int = 64,
+    height: int = 32,
+    density: float = 0.6,
+    e_materials: torch.Tensor = torch.tensor([3.0, 2.0, 1.0], dtype=torch.double),
+    material_density_weight: torch.Tensor = torch.tensor(
+        [1.0, 0.7, 0.4], dtype=torch.double
+    ),
     device=DEFAULT_DEVICE,
     dtype=DEFAULT_DTYPE,
-):
-    """A bridge embedded in a canyon, without side supports."""
-    deck_height = round(height * (1 - deck_level))
-
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, deck_height:, :] = 1
-    normals[0, :, X] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, deck_height, Y] = -1 / width
-    return Problem(normals, forces, density, epsilon)
-
-
-def multistory_building(
-    width=32,
-    height=32,
-    density=0.3,
-    interval=16,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A multi-story building, supported from the ground."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, Y] = 1
-    normals[-1, :, X] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, ::interval, Y] = -1 / width
-    return Problem(normals, forces, density, epsilon)
-
-
-def thin_support_bridge(
-    width=32,
-    height=32,
-    density=0.25,
-    design_width=0.25,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
+) -> Dict[str, Any]:
     """
-    A bridge supported from below with fixed width supports.
+    Problem that defined configuration for multi-material
+    cantilever beam
     """
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, Y] = 1
-    normals[0, :, X] = 1
-    normals[-1, :, X] = 1
+    ndof = 2 * (width + 1) * (height + 1)
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, 0, Y] = -1 / width
+    # Forces on the system
+    forces = torch.zeros((ndof, 1))
+    forces[2 * (width + 1) * (height + 1) - 2 * height + 1, 0] = -1
 
-    mask = torch.ones((width, height)).to(device=device, dtype=dtype)
-    mask[
-        -round(width * (1 - design_width)) :,
-        : round(height * (1 - design_width)),  # noqa
-    ] = 0  # noqa
+    # Degrees of freedom
+    alldofs_array = np.arange(ndof)
 
-    return Problem(normals, forces, density, epsilon, mask)
+    # Fixed dofs
+    fixdofs_array = alldofs_array[0 : 2 * (height + 1) : 1]
 
+    # Free dofs
+    freedofs_array = np.sort(list(set(alldofs_array) - set(fixdofs_array)))
 
-def drawbridge(
-    width=32,
-    height=32,
-    density=0.25,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A bridge supported from above on the left."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[0, :, :] = 1
+    # Convert to torch tensorse)
+    mask = torch.tensor(torch.tensor(1.0)).to(device=device, dtype=dtype)
+    freedofs = torch.tensor(freedofs_array).to(device=device, dtype=torch.long)
+    fixdofs = torch.tensor(fixdofs_array).to(device=device, dtype=torch.long)
 
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[:, -1, Y] = -1 / width
+    params = {
+        # material properties
+        "young": 1.0,
+        "young_min": 1e-9,
+        "poisson": 0.3,
+        "g": 0.0,
+        # constraints
+        "combined_frac": density,
+        "xmin": 0.001,
+        "xmax": 1.0,
+        # input parameters
+        "nelx": torch.tensor(width),
+        "nely": torch.tensor(height),
+        "mask": mask,
+        "freedofs": freedofs,
+        "fixdofs": fixdofs,
+        "forces": forces.flatten(),
+        "penal": 3.0,
+        "filter_width": 2,
+        "ndof": len(alldofs_array),
+        "e_materials": e_materials,
+        "material_density_weight": material_density_weight,
+        "y_symmetry": False,
+        "x_symmetry": False,
+    }
 
-    return Problem(normals, forces, density, epsilon)
-
-
-def hoop(
-    width=32,
-    height=32,
-    density=0.25,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Downward forces in a circle, supported from the ground."""
-    if 2 * width != height:
-        raise ValueError("hoop must be circular")
-
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[-1, :, X] = 1
-    normals[:, -1, Y] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    i, j, value = skimage.draw.circle_perimeter_aa(
-        width, width, width, forces.shape[:2]
-    )
-    value = torch.tensor(value).to(device=device, dtype=dtype)
-    forces[i, j, Y] = -value / (2 * np.pi * width)
-
-    return Problem(normals, forces, density, epsilon)
-
-
-def multipoint_circle(
-    width=140,
-    height=140,
-    density=0.333,
-    radius=6 / 7,
-    weights=(1, 0, 0, 0, 0, 0),
-    num_points=12,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Various load scenarios at regular points in a circle points."""
-    # From: http://www2.mae.ufl.edu/mdo/Papers/5219.pdf
-    # Note: currently unused in our test suite only because the optimization
-    # problems from the paper are defined based on optimizing for compliance
-    # averaged over multiple force scenarios.
-    c_x = width // 2
-    c_y = height // 2
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[c_x - 1 : c_x + 2, c_y - 1 : c_y + 2, :] = 1  # noqa
-    assert normals.sum() == 18
-
-    c1, c2, c3, c4, c_x0, c_y0 = weights
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    for position in range(num_points):
-        x = radius * c_x * np.sin(2 * np.pi * position / num_points)
-        y = radius * c_y * np.cos(2 * np.pi * position / num_points)
-        i = int(round(c_x + x))
-        j = int(round(c_y + y))
-        forces[i, j, X] = +c1 * y + c2 * x + c3 * y + c4 * x + c_x0
-        forces[i, j, Y] = -c1 * x + c2 * y + c3 * x - c4 * y + c_y0
-
-    return Problem(normals, forces, density, epsilon)
-
-
-def dam(
-    width=32,
-    height=32,
-    density=0.5,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Support horizitonal forces, proportional to depth."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, X] = 1
-    normals[:, -1, Y] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    forces[0, :, X] = 2 * torch.arange(1, height + 2) / height**2
-    return Problem(normals, forces, density, epsilon)
-
-
-def ramp(
-    width=32,
-    height=32,
-    density=0.25,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """Support downward forces on a ramp."""
-    return staircase(
-        width=width, height=height, density=density, epsilon=epsilon, num_stories=1
-    )
-
-
-def staircase(
-    width=32,
-    height=32,
-    density=0.25,
-    num_stories=2,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A ramp that zig-zags upward, supported from the ground."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, :] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    for story in range(num_stories):
-        parity = story % 2
-        start_coordinates = (0, (story + parity) * height // num_stories)
-        stop_coordiates = (width, (story + 1 - parity) * height // num_stories)
-        i, j, value = skimage.draw.line_aa(*start_coordinates, *stop_coordiates)
-
-        value = torch.tensor(value).to(device=device, dtype=dtype)
-        forces[i, j, Y] = torch.minimum(forces[i, j, Y], -value / (width * num_stories))
-
-    return Problem(normals, forces, density, epsilon)
-
-
-def staggered_points(
-    width=32,
-    height=32,
-    density=0.3,
-    interval=16,
-    break_symmetry=False,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
-):
-    """A staggered grid of points with downward forces, supported from below."""
-    normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    normals[:, -1, Y] = 1
-    normals[0, :, X] = 1
-    normals[-1, :, X] = 1
-
-    forces = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
-    f = interval**2 / (width * height)
-    # intentionally break horizontal symmetry?
-    forces[interval // 2 + int(break_symmetry) :: interval, ::interval, Y] = -f  # noqa
-    forces[int(break_symmetry) :: interval, interval // 2 :: interval, Y] = -f  # noqa
-    return Problem(normals, forces, density, epsilon)
+    return params
 
 
 def build_problems_by_name(device=DEFAULT_DEVICE):
@@ -723,37 +807,37 @@ def build_problems_by_name(device=DEFAULT_DEVICE):
         # idealized beam and cantilevers
         "mbb_beam": [
             mbb_beam(96, 32, density=0.5, device=device),
-            mbb_beam(192, 64, density=0.4, device=device),
+            mbb_beam(192, 64, density=0.5, device=device),
             mbb_beam(384, 128, density=0.3, device=device),
             mbb_beam(384, 128, density=0.5, device=device),
             mbb_beam(192, 32, density=0.5, device=device),
             mbb_beam(384, 64, density=0.4, device=device),
         ],
-        "mbb_beam_circular_ndr": [
-            mbb_beam_with_circular_non_design_region(
-                96, 32, density=0.5, device=device
-            ),
-            mbb_beam_with_circular_non_design_region(
-                192, 64, density=0.4, device=device
-            ),
-            mbb_beam_with_circular_non_design_region(
-                384, 128, density=0.3, device=device
-            ),
-            mbb_beam_with_circular_non_design_region(
-                192, 32, density=0.5, device=device
-            ),
-            mbb_beam_with_circular_non_design_region(
-                384, 64, density=0.4, device=device
-            ),
-        ],
-        "cantilever_beam_full": [
-            cantilever_beam_full(96, 32, density=0.4, device=device),
-            cantilever_beam_full(192, 64, density=0.3, device=device),
-            cantilever_beam_full(352, 96, density=0.4, device=device),
-            cantilever_beam_full(384, 128, density=0.4, device=device),
-            cantilever_beam_full(384, 128, density=0.2, device=device),
-            cantilever_beam_full(384, 128, density=0.15, device=device),
-        ],
+        # "mbb_beam_circular_ndr": [
+        #     mbb_beam_with_circular_non_design_region(
+        #         96, 32, density=0.5, device=device
+        #     ),
+        #     mbb_beam_with_circular_non_design_region(
+        #         192, 64, density=0.4, device=device
+        #     ),
+        #     mbb_beam_with_circular_non_design_region(
+        #         384, 128, density=0.3, device=device
+        #     ),
+        #     mbb_beam_with_circular_non_design_region(
+        #         192, 32, density=0.5, device=device
+        #     ),
+        #     mbb_beam_with_circular_non_design_region(
+        #         384, 64, density=0.4, device=device
+        #     ),
+        # ],
+        # "cantilever_beam_full": [
+        #     cantilever_beam_full(96, 32, density=0.4, device=device),
+        #     cantilever_beam_full(192, 64, density=0.3, device=device),
+        #     cantilever_beam_full(352, 96, density=0.4, device=device),
+        #     cantilever_beam_full(384, 128, density=0.4, device=device),
+        #     cantilever_beam_full(384, 128, density=0.2, device=device),
+        #     cantilever_beam_full(384, 128, density=0.15, device=device),
+        # ],
         "cantilever_beam_two_point": [
             cantilever_beam_two_point(64, 48, density=0.4, device=device),
             cantilever_beam_two_point(96, 96, density=0.4, device=device),
@@ -761,35 +845,35 @@ def build_problems_by_name(device=DEFAULT_DEVICE):
             cantilever_beam_two_point(256, 192, density=0.2, device=device),
             cantilever_beam_two_point(256, 192, density=0.15, device=device),
         ],
-        "pure_bending_moment": [
-            pure_bending_moment(32, 64, density=0.15, device=device),
-            pure_bending_moment(64, 128, density=0.125, device=device),
-            pure_bending_moment(128, 256, density=0.1, device=device),
-        ],
-        "michell_centered_both": [
-            michell_centered_both(32, 64, density=0.12, device=device),
-            michell_centered_both(64, 128, density=0.12, device=device),
-            michell_centered_both(128, 256, density=0.12, device=device),
-            michell_centered_both(128, 256, density=0.06, device=device),
-        ],
-        "michell_centered_top": [
-            michell_centered_top(32, 64, density=0.12, device=device),
-            michell_centered_top(64, 128, density=0.12, device=device),
-            michell_centered_top(128, 256, density=0.12, device=device),
-            michell_centered_top(128, 256, density=0.06, device=device),
-        ],
-        "michell_centered_below": [
-            michell_centered_below(64, 64, density=0.12, device=device),
-            michell_centered_below(128, 128, density=0.12, device=device),
-            michell_centered_below(256, 256, density=0.12, device=device),
-            michell_centered_below(256, 256, density=0.06, device=device),
-        ],
-        "ground_structure": [
-            ground_structure(64, 64, density=0.12, device=device),
-            ground_structure(128, 128, density=0.1, device=device),
-            ground_structure(256, 256, density=0.07, device=device),
-            ground_structure(256, 256, density=0.05, device=device),
-        ],
+        # "pure_bending_moment": [
+        #     pure_bending_moment(32, 64, density=0.15, device=device),
+        #     pure_bending_moment(64, 128, density=0.125, device=device),
+        #     pure_bending_moment(128, 256, density=0.1, device=device),
+        # ],
+        # "michell_centered_both": [
+        #     michell_centered_both(32, 64, density=0.12, device=device),
+        #     michell_centered_both(64, 128, density=0.12, device=device),
+        #     michell_centered_both(128, 256, density=0.12, device=device),
+        #     michell_centered_both(128, 256, density=0.06, device=device),
+        # ],
+        # "michell_centered_top": [
+        #     michell_centered_top(32, 64, density=0.12, device=device),
+        #     michell_centered_top(64, 128, density=0.12, device=device),
+        #     michell_centered_top(128, 256, density=0.12, device=device),
+        #     michell_centered_top(128, 256, density=0.06, device=device),
+        # ],
+        # "michell_centered_below": [
+        #     michell_centered_below(64, 64, density=0.12, device=device),
+        #     michell_centered_below(128, 128, density=0.12, device=device),
+        #     michell_centered_below(256, 256, density=0.12, device=device),
+        #     michell_centered_below(256, 256, density=0.06, device=device),
+        # ],
+        # "ground_structure": [
+        #     ground_structure(64, 64, density=0.12, device=device),
+        #     ground_structure(128, 128, density=0.1, device=device),
+        #     ground_structure(256, 256, density=0.07, device=device),
+        #     ground_structure(256, 256, density=0.05, device=device),
+        # ],
         # # simple constrained designs
         "l_shape_0.2": [
             l_shape(64, 64, aspect=0.2, density=0.4, device=device),
@@ -802,62 +886,62 @@ def build_problems_by_name(device=DEFAULT_DEVICE):
             l_shape(192, 192, aspect=0.4, density=0.3, device=device),
             l_shape(256, 256, aspect=0.4, density=0.2, device=device),
         ],
-        "crane": [
-            crane(64, 64, density=0.3, device=device),
-            crane(128, 128, density=0.2, device=device),
-            crane(256, 256, density=0.15, device=device),
-            crane(256, 256, density=0.1, device=device),
-        ],
-        # vertical support structures
-        "center_support": [
-            center_support(64, 64, density=0.15, device=device),
-            center_support(128, 128, density=0.1, device=device),
-            center_support(256, 256, density=0.1, device=device),
-            center_support(256, 256, density=0.05, device=device),
-        ],
-        "column": [
-            column(32, 128, density=0.3, device=device),
-            column(64, 256, density=0.3, device=device),
-            column(128, 512, density=0.1, device=device),
-            column(128, 512, density=0.3, device=device),
-            column(128, 512, density=0.5, device=device),
-        ],
-        "roof": [
-            roof(64, 64, density=0.2, device=device),
-            roof(128, 128, density=0.15, device=device),
-            roof(256, 256, density=0.4, device=device),
-            roof(256, 256, density=0.2, device=device),
-            roof(256, 256, density=0.1, device=device),
-        ],
-        # bridges
-        "causeway_bridge_top": [
-            causeway_bridge(64, 64, density=0.3, device=device),
-            causeway_bridge(128, 128, density=0.2, device=device),
-            causeway_bridge(256, 256, density=0.1, device=device),
-            causeway_bridge(128, 64, density=0.3, device=device),
-            causeway_bridge(256, 128, density=0.2, device=device),
-        ],
-        "causeway_bridge_middle": [
-            causeway_bridge(64, 64, density=0.12, deck_level=0.5, device=device),
-            causeway_bridge(128, 128, density=0.1, deck_level=0.5, device=device),
-            causeway_bridge(256, 256, density=0.08, deck_level=0.5, device=device),
-        ],
-        "causeway_bridge_low": [
-            causeway_bridge(64, 64, density=0.12, deck_level=0.3, device=device),
-            causeway_bridge(128, 128, density=0.1, deck_level=0.3, device=device),
-            causeway_bridge(256, 256, density=0.08, deck_level=0.3, device=device),
-        ],
-        "two_level_bridge": [
-            two_level_bridge(64, 64, density=0.2, device=device),
-            two_level_bridge(128, 128, density=0.16, device=device),
-            two_level_bridge(256, 256, density=0.12, device=device),
-        ],
-        "free_suspended_bridge": [
-            suspended_bridge(64, 64, density=0.15, anchored=False, device=device),
-            suspended_bridge(128, 128, density=0.1, anchored=False, device=device),
-            suspended_bridge(256, 256, density=0.075, anchored=False, device=device),
-            suspended_bridge(256, 256, density=0.05, anchored=False, device=device),
-        ],
+        # "crane": [
+        #     crane(64, 64, density=0.3, device=device),
+        #     crane(128, 128, density=0.2, device=device),
+        #     crane(256, 256, density=0.15, device=device),
+        #     crane(256, 256, density=0.1, device=device),
+        # ],
+        # # vertical support structures
+        # "center_support": [
+        #     center_support(64, 64, density=0.15, device=device),
+        #     center_support(128, 128, density=0.1, device=device),
+        #     center_support(256, 256, density=0.1, device=device),
+        #     center_support(256, 256, density=0.05, device=device),
+        # ],
+        # "column": [
+        #     column(32, 128, density=0.3, device=device),
+        #     column(64, 256, density=0.3, device=device),
+        #     column(128, 512, density=0.1, device=device),
+        #     column(128, 512, density=0.3, device=device),
+        #     column(128, 512, density=0.5, device=device),
+        # ],
+        # "roof": [
+        #     roof(64, 64, density=0.2, device=device),
+        #     roof(128, 128, density=0.15, device=device),
+        #     roof(256, 256, density=0.4, device=device),
+        #     roof(256, 256, density=0.2, device=device),
+        #     roof(256, 256, density=0.1, device=device),
+        # ],
+        # # bridges
+        # "causeway_bridge_top": [
+        #     causeway_bridge(64, 64, density=0.3, device=device),
+        #     causeway_bridge(128, 128, density=0.2, device=device),
+        #     causeway_bridge(256, 256, density=0.1, device=device),
+        #     causeway_bridge(128, 64, density=0.3, device=device),
+        #     causeway_bridge(256, 128, density=0.2, device=device),
+        # ],
+        # "causeway_bridge_middle": [
+        #     causeway_bridge(64, 64, density=0.12, deck_level=0.5, device=device),
+        #     causeway_bridge(128, 128, density=0.1, deck_level=0.5, device=device),
+        #     causeway_bridge(256, 256, density=0.08, deck_level=0.5, device=device),
+        # ],
+        # "causeway_bridge_low": [
+        #     causeway_bridge(64, 64, density=0.12, deck_level=0.3, device=device),
+        #     causeway_bridge(128, 128, density=0.1, deck_level=0.3, device=device),
+        #     causeway_bridge(256, 256, density=0.08, deck_level=0.3, device=device),
+        # ],
+        # "two_level_bridge": [
+        #     two_level_bridge(64, 64, density=0.2, device=device),
+        #     two_level_bridge(128, 128, density=0.16, device=device),
+        #     two_level_bridge(256, 256, density=0.12, device=device),
+        # ],
+        # "free_suspended_bridge": [
+        #     suspended_bridge(64, 64, density=0.15, anchored=False, device=device),
+        #     suspended_bridge(128, 128, density=0.1, anchored=False, device=device),
+        #     suspended_bridge(256, 256, density=0.075, anchored=False, device=device),
+        #     suspended_bridge(256, 256, density=0.05, anchored=False, device=device),
+        # ],
         "anchored_suspended_bridge": [
             suspended_bridge(
                 64, 64, density=0.15, span_position=0.1, anchored=True, device=device
@@ -890,67 +974,67 @@ def build_problems_by_name(device=DEFAULT_DEVICE):
                 device=device,  # noqa
             ),
         ],
-        "canyon_bridge": [
-            canyon_bridge(64, 64, density=0.16, device=device),
-            canyon_bridge(128, 128, density=0.12, device=device),
-            canyon_bridge(256, 256, density=0.1, device=device),
-            canyon_bridge(256, 256, density=0.05, device=device),
-        ],
-        "thin_support_bridge": [
-            thin_support_bridge(64, 64, density=0.3, device=device),
-            thin_support_bridge(128, 128, density=0.2, device=device),
-            thin_support_bridge(256, 256, density=0.15, device=device),
-            thin_support_bridge(256, 256, density=0.1, device=device),
-        ],
-        "drawbridge": [
-            drawbridge(64, 64, density=0.2, device=device),
-            drawbridge(128, 128, density=0.15, device=device),
-            drawbridge(256, 256, density=0.1, device=device),
-        ],
-        # more complex design problems
-        "hoop": [
-            hoop(32, 64, density=0.25, device=device),
-            hoop(64, 128, density=0.2, device=device),
-            hoop(128, 256, density=0.15, device=device),
-        ],
-        "dam": [
-            dam(64, 64, density=0.2, device=device),
-            dam(128, 128, density=0.15, device=device),
-            dam(256, 256, density=0.05, device=device),
-            dam(256, 256, density=0.1, device=device),
-            dam(256, 256, density=0.2, device=device),
-        ],
-        "ramp": [
-            ramp(64, 64, density=0.3, device=device),
-            ramp(128, 128, density=0.2, device=device),
-            ramp(256, 256, density=0.2, device=device),
-            ramp(256, 256, density=0.1, device=device),
-        ],
-        "staircase": [
-            staircase(64, 64, density=0.3, num_stories=3, device=device),
-            staircase(128, 128, density=0.2, num_stories=3, device=device),
-            staircase(256, 256, density=0.15, num_stories=3, device=device),
-            staircase(128, 512, density=0.15, num_stories=6, device=device),
-        ],
-        "staggered_points": [
-            staggered_points(64, 64, density=0.3, device=device),
-            staggered_points(128, 128, density=0.3, device=device),
-            staggered_points(256, 256, density=0.3, device=device),
-            staggered_points(256, 256, density=0.5, device=device),
-            staggered_points(64, 128, density=0.3, device=device),
-            staggered_points(128, 256, density=0.3, device=device),
-            staggered_points(32, 128, density=0.3, device=device),
-            staggered_points(64, 256, density=0.3, device=device),
-            staggered_points(128, 512, density=0.3, device=device),
-            staggered_points(128, 512, interval=32, density=0.15, device=device),
-        ],
-        "multistory_building": [
-            multistory_building(32, 64, density=0.5, device=device),
-            multistory_building(64, 128, interval=32, density=0.4, device=device),
-            multistory_building(128, 256, interval=64, density=0.3, device=device),
-            multistory_building(128, 512, interval=64, density=0.25, device=device),
-            multistory_building(128, 512, interval=128, density=0.2, device=device),
-        ],
+        # "canyon_bridge": [
+        #     canyon_bridge(64, 64, density=0.16, device=device),
+        #     canyon_bridge(128, 128, density=0.12, device=device),
+        #     canyon_bridge(256, 256, density=0.1, device=device),
+        #     canyon_bridge(256, 256, density=0.05, device=device),
+        # ],
+        # "thin_support_bridge": [
+        #     thin_support_bridge(64, 64, density=0.3, device=device),
+        #     thin_support_bridge(128, 128, density=0.2, device=device),
+        #     thin_support_bridge(256, 256, density=0.15, device=device),
+        #     thin_support_bridge(256, 256, density=0.1, device=device),
+        # ],
+        # "drawbridge": [
+        #     drawbridge(64, 64, density=0.2, device=device),
+        #     drawbridge(128, 128, density=0.15, device=device),
+        #     drawbridge(256, 256, density=0.1, device=device),
+        # ],
+        # # more complex design problems
+        # "hoop": [
+        #     hoop(32, 64, density=0.25, device=device),
+        #     hoop(64, 128, density=0.2, device=device),
+        #     hoop(128, 256, density=0.15, device=device),
+        # ],
+        # "dam": [
+        #     dam(64, 64, density=0.2, device=device),
+        #     dam(128, 128, density=0.15, device=device),
+        #     dam(256, 256, density=0.05, device=device),
+        #     dam(256, 256, density=0.1, device=device),
+        #     dam(256, 256, density=0.2, device=device),
+        # ],
+        # "ramp": [
+        #     ramp(64, 64, density=0.3, device=device),
+        #     ramp(128, 128, density=0.2, device=device),
+        #     ramp(256, 256, density=0.2, device=device),
+        #     ramp(256, 256, density=0.1, device=device),
+        # ],
+        # "staircase": [
+        #     staircase(64, 64, density=0.3, num_stories=3, device=device),
+        #     staircase(128, 128, density=0.2, num_stories=3, device=device),
+        #     staircase(256, 256, density=0.15, num_stories=3, device=device),
+        #     staircase(128, 512, density=0.15, num_stories=6, device=device),
+        # ],
+        # "staggered_points": [
+        #     staggered_points(64, 64, density=0.3, device=device),
+        #     staggered_points(128, 128, density=0.3, device=device),
+        #     staggered_points(256, 256, density=0.3, device=device),
+        #     staggered_points(256, 256, density=0.5, device=device),
+        #     staggered_points(64, 128, density=0.3, device=device),
+        #     staggered_points(128, 256, density=0.3, device=device),
+        #     staggered_points(32, 128, density=0.3, device=device),
+        #     staggered_points(64, 256, density=0.3, device=device),
+        #     staggered_points(128, 512, density=0.3, device=device),
+        #     staggered_points(128, 512, interval=32, density=0.15, device=device),
+        # ],
+        # "multistory_building": [
+        #     multistory_building(32, 64, density=0.5, device=device),
+        #     multistory_building(64, 128, interval=32, density=0.4, device=device),
+        #     multistory_building(128, 256, interval=64, density=0.3, device=device),
+        #     multistory_building(128, 512, interval=64, density=0.25, device=device),
+        #     multistory_building(128, 512, interval=128, density=0.2, device=device),
+        # ],
     }
 
     # Create the ability to do problems by name the same as the paper

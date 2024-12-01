@@ -7,11 +7,12 @@ from typing import Tuple
 
 # third party
 import click
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-import wandb
 import xarray
+from matplotlib import colors
 from neural_structural_optimization import models as google_models
 from neural_structural_optimization import topo_api as google_topo_api
 from neural_structural_optimization import train as google_train
@@ -24,6 +25,7 @@ import topo_api
 import topo_physics
 import train
 import utils
+import wandb
 from MMTOuNN.neuralTO_MM import TopologyOptimizer as MMTO
 from TOuNN.TOuNN import TopologyOptimizer
 
@@ -348,6 +350,7 @@ def train_all(problem, max_iterations, cnn_kwargs=None):
     ds_cnn = google_train.train_lbfgs(model, max_iterations)
 
     dims = pd.Index(["cnn-lbfgs", "mma"], name="model")
+
     return xarray.concat([ds_cnn, ds_mma], dim=dims)
 
 
@@ -524,14 +527,6 @@ def mmtounn_train_and_outputs(
 
     # problem
     exampleName = 'TipCantilever'
-
-    # args = topo_api.multi_material_tip_cantilever_task(
-    #     nelx=nelx,
-    #     nely=nely,
-    #     e_materials=e_materials,
-    #     material_density_weight=material_density_weight,
-    #     combined_frac=combined_frac,
-    # )
 
     fixed = args['fixdofs'].numpy().astype(int)
     force = args['forces'].numpy().astype(np.float64)
@@ -854,10 +849,12 @@ def run_multi_material_pipeline(problem_name):
         # Calculate the initial compliance
         model.eval()
         with torch.no_grad():
-            initial_compliance, x_phys, _ = (
-                topo_physics.calculate_multi_material_compliance(
-                    model, ke, args, device, torch.double
-                )
+            (
+                initial_compliance,
+                x_phys,
+                _,
+            ) = topo_physics.calculate_multi_material_compliance(
+                model, ke, args, device, torch.double
             )
 
         # Detach calculation and use it for scaling in PyGranso
@@ -958,7 +955,7 @@ def run_multi_material_pipeline(problem_name):
 @click.option('--problem_name', default='mbb_beam_96x32_0.5')
 @click.option('--kernel_size', default="12,12")
 @click.option('--num_trials', default=1)
-def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_trials):
+def run_multi_structure_pipeline_v2(model_size, problem_name, kernel_size, num_trials):
     """
     Task that will build out multiple structures and compare
     performance against known benchmarks.
@@ -967,10 +964,10 @@ def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_tria
     device = utils.get_devices()
 
     # Max iterations for PyGranso
-    maxit: int = 1500
+    maxit = 1
 
     # Max iterations for Google-DIP
-    max_iterations = 200
+    max_iterations = 2
 
     # For testing, we will run two experimentation trackers
     API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
@@ -1121,6 +1118,797 @@ def run_multi_structure_pipeline(model_size, problem_name, kernel_size, num_tria
         pickle.dump(benchmark_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     print('Run completed! 🎉')
+
+
+@cli.command('test-multi-material-bridge')
+def test_multi_material_bridge():
+    # For testing, we will run two experimentation trackers
+    API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
+    PROJECT_NAME = 'Topology-Optimization'
+
+    penal = 3.0
+    scale_factor = 1.0
+    latent_size = 96
+    dense_channels = 24
+    kernel_size = (11, 11)
+    ks_string = ",".join(map(str, kernel_size))
+
+    # DIP Setup
+    conv_filters = (256 // 2, 128 // 2, 64 // 2, 32 // 2)
+    cv_string = ",".join(map(str, conv_filters))
+
+    # Enable wandb
+    wandb.login(key=API_KEY)
+
+    # Initalize wandb
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project=PROJECT_NAME,
+        tags=[
+            'topology-optimization-task',
+            'multi-material bridge',
+        ],
+        config={
+            'latent_size': latent_size,
+            'dense_channels': dense_channels,
+            'kernel_size': ks_string,
+            'conv_filters': cv_string,
+            'penal': penal,
+            'scale_factor': scale_factor,
+        },
+    )
+
+    # Create directory for saving the model and
+    # output data
+    save_path = os.path.join(
+        '/users/5/dever120/NCVX-Neural-Structural-Optimization/results',
+        f'{wandb.run.id}',
+    )
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        print(f"The directory {save_path} was created.")
+    else:
+        print(f"The directory {save_path} already exists.")
+
+    device = torch.device('cpu')
+
+    # Setup the multi-material bridge problem
+    nelx = 128
+    nely = 64
+    combined_frac = 0.4
+    e_materials = torch.tensor([0.2, 0.6, 1.0], dtype=torch.double)
+    material_density_weight = torch.tensor([0.4, 0.7, 1.0])
+
+    args = topo_api.multi_material_bridge_task(
+        nelx=nelx,
+        nely=nely,
+        e_materials=e_materials,
+        material_density_weight=material_density_weight,
+        combined_frac=combined_frac,
+    )
+
+    args['penal'] = penal
+    args['scale_factor'] = scale_factor
+    args['forces'] = torch.tensor(args['forces'].ravel())
+    args['fixdofs'] = torch.tensor(args['fixdofs'])
+    args['freedofs'] = torch.tensor(args['freedofs'])
+    args['e_materials'] = e_materials
+    args['material_density_weight'] = material_density_weight
+
+    # Create the stiffness matrix
+    ke = topo_physics.get_stiffness_matrix(
+        young=args['young'],
+        poisson=args['poisson'],
+        device=device,
+    ).double()
+
+    cnn_kwargs = {
+        'latent_size': latent_size,
+        'dense_channels': dense_channels,
+        'kernel_size': kernel_size,
+        'conv_filters': conv_filters,
+    }
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 6))
+    axes = axes.flatten()
+
+    # Trials and seeds
+    seeds = [1234, 1985, 1986, 2009]
+    first_stage_maxit = 1500
+    for idx, seed in enumerate(seeds):
+        ax = axes[idx]
+
+        # Intialize random seed
+        utils.build_random_seed(seed)
+        cnn_kwargs['random_seed'] = seed
+
+        model = models.MultiMaterialCNNModel(args, **cnn_kwargs).to(
+            device=device, dtype=torch.double
+        )
+
+        # Calculate the initial compliance
+        model.eval()
+        with torch.no_grad():
+            (
+                initial_compliance,
+                x_phys,
+                _,
+                _,
+            ) = topo_physics.calculate_multi_material_compliance(
+                model, ke, args, device, torch.double
+            )
+
+        # Detach calculation and use it for scaling in PyGranso
+        initial_compliance = (
+            torch.ceil(initial_compliance.to(torch.float64).detach()) + 1.0
+        )
+
+        # Train PyGranso MMTO - First Stage
+        # Setup the combined function for PyGranso
+        comb_fn = lambda model: train.multi_material_constraint_function(  # noqa
+            model,
+            initial_compliance,
+            ke,
+            args,
+            device=device,
+            dtype=torch.double,
+        )
+
+        train.train_pygranso_mmto(
+            model=model, comb_fn=comb_fn, maxit=first_stage_maxit, device=device
+        )
+
+        # Get the final design
+        (
+            compliance,
+            final_design,
+            _,
+            _,
+        ) = topo_physics.calculate_multi_material_compliance(
+            model, ke, args, device, torch.double
+        )
+        final_design = final_design.detach().numpy()
+
+        design = final_design.argmax(axis=1).reshape(128, 64).T
+
+        fillColors = ['white', 'black', 'red', 'blue']
+        cmap = colors.ListedColormap(fillColors)
+
+        ax.imshow(design, cmap=cmap, aspect="auto")
+        ax.set_title(f'Compliance = {compliance}')
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    path = os.path.join(save_path, 'multi-bridge-results.png')
+    fig.savefig(path)
+
+
+@cli.command('test-multi-material-cantilever')
+def test_multi_material_cantilever():
+    # For testing, we will run two experimentation trackers
+    API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
+    PROJECT_NAME = 'Topology-Optimization'
+
+    penal = 3.0
+    scale_factor = 1.0
+    latent_size = 96
+    dense_channels = 24
+    kernel_size = (11, 11)
+    ks_string = ",".join(map(str, kernel_size))
+
+    # DIP Setup
+    conv_filters = (256 // 2, 128 // 2, 64 // 2, 32 // 2)
+    cv_string = ",".join(map(str, conv_filters))
+
+    # Enable wandb
+    wandb.login(key=API_KEY)
+
+    # Initalize wandb
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project=PROJECT_NAME,
+        tags=[
+            'topology-optimization-task',
+            'multi-material cantilever',
+        ],
+        config={
+            'latent_size': latent_size,
+            'dense_channels': dense_channels,
+            'kernel_size': ks_string,
+            'conv_filters': cv_string,
+            'penal': penal,
+            'scale_factor': scale_factor,
+        },
+    )
+
+    # Create directory for saving the model and
+    # output data
+    save_path = os.path.join(
+        '/users/5/dever120/NCVX-Neural-Structural-Optimization/results',
+        f'{wandb.run.id}',
+    )
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        print(f"The directory {save_path} was created.")
+    else:
+        print(f"The directory {save_path} already exists.")
+
+    device = torch.device('cpu')
+
+    # Setup the multi-material bridge problem
+    nelx = 64
+    nely = 32
+    combined_frac = 0.6
+    e_materials = torch.tensor([3.0, 2.0, 1.0], dtype=torch.double)
+    material_density_weight = torch.tensor([1.0, 0.7, 0.4])
+
+    args = topo_api.multi_material_tip_cantilever_task(
+        nelx=nelx,
+        nely=nely,
+        e_materials=e_materials,
+        material_density_weight=material_density_weight,
+        combined_frac=combined_frac,
+    )
+
+    args['penal'] = penal
+    args['young_min'] = 1e-9
+    args['scale_factor'] = scale_factor
+    args['forces'] = torch.tensor(args['forces'].ravel())
+    args['fixdofs'] = torch.tensor(args['fixdofs'])
+    args['freedofs'] = torch.tensor(args['freedofs'])
+    args['e_materials'] = e_materials
+    args['material_density_weight'] = material_density_weight
+
+    # Create the stiffness matrix
+    ke = topo_physics.get_stiffness_matrix(
+        young=args['young'],
+        poisson=args['poisson'],
+        device=device,
+    ).double()
+
+    cnn_kwargs = {
+        'latent_size': latent_size,
+        'dense_channels': dense_channels,
+        'kernel_size': kernel_size,
+        'conv_filters': conv_filters,
+    }
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 6))
+    axes = axes.flatten()
+
+    # Trials and seeds
+    seeds = [1234, 1985, 1986, 2009]
+    first_stage_maxit = 1500
+    for idx, seed in enumerate(seeds):
+        try:
+            ax = axes[idx]
+            # Intialize random seed
+            utils.build_random_seed(seed)
+            cnn_kwargs['random_seed'] = seed
+
+            model = models.MultiMaterialCNNModel(args, **cnn_kwargs).to(
+                device=device, dtype=torch.double
+            )
+
+            # Calculate the initial compliance
+            model.eval()
+            with torch.no_grad():
+                (
+                    initial_compliance,
+                    x_phys,
+                    _,
+                    _,
+                ) = topo_physics.calculate_multi_material_compliance(
+                    model, ke, args, device, torch.double
+                )
+
+            # Detach calculation and use it for scaling in PyGranso
+            initial_compliance = (
+                torch.ceil(initial_compliance.to(torch.float64).detach()) + 1.0
+            )
+
+            # Train PyGranso MMTO - First Stage
+            # Setup the combined function for PyGranso
+            comb_fn = lambda model: train.multi_material_constraint_function(  # noqa
+                model,
+                initial_compliance,
+                ke,
+                args,
+                device=device,
+                dtype=torch.double,
+            )
+
+            train.train_pygranso_mmto(
+                model=model, comb_fn=comb_fn, maxit=first_stage_maxit, device=device
+            )
+
+            # Get the final design
+            (
+                compliance,
+                final_design,
+                _,
+                _,
+            ) = topo_physics.calculate_multi_material_compliance(
+                model, ke, args, device, torch.double
+            )
+            final_design = final_design.detach().numpy()
+
+            design = final_design.argmax(axis=1).reshape(64, 32).T[::-1, :]
+
+            fillColors = ['white', 'black', 'red', 'blue']
+            cmap = colors.ListedColormap(fillColors)
+
+            ax.imshow(design, cmap=cmap, aspect="auto")
+            ax.set_title(f'Compliance = {compliance}')
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        except:
+            pass
+
+    path = os.path.join(save_path, 'multi-cantilever-results.png')
+    fig.savefig(path)
+
+
+@cli.command('test-single-material-bridge-v2')
+def test_single_material_bridge_v2():
+    # For testing, we will run two experimentation trackers
+    API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
+    PROJECT_NAME = 'Topology-Optimization'
+
+    penal = 3.0
+    scale_factor = 1.0
+    latent_size = 96
+    dense_channels = 24
+    kernel_size = (11, 11)
+    ks_string = ",".join(map(str, kernel_size))
+
+    conv_filters = (256 // 2, 128 // 2, 64 // 2, 32 // 2)
+    cv_string = ",".join(map(str, conv_filters))
+
+    # Enable wandb
+    wandb.login(key=API_KEY)
+
+    # Initalize wandb
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project=PROJECT_NAME,
+        tags=[
+            'topology-optimization-task',
+            'single-material bridge',
+        ],
+        config={
+            'latent_size': latent_size,
+            'dense_channels': dense_channels,
+            'conv_filters': cv_string,
+            'kernel_size': ks_string,
+            'penal': penal,
+            'scale_factor': scale_factor,
+        },
+    )
+
+    # Create directory for saving the model and
+    # output data
+    save_path = os.path.join(
+        '/users/5/dever120/NCVX-Neural-Structural-Optimization/results',
+        f'{wandb.run.id}',
+    )
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        print(f"The directory {save_path} was created.")
+    else:
+        print(f"The directory {save_path} already exists.")
+
+    device = torch.device('cpu')
+
+    problem_name = 'anchored_suspended_bridge_128x128_0.1'
+
+    # Build the problems for pygranso and google
+    PYGRANSO_PROBLEMS_BY_NAME = problems.build_problems_by_name(device=device)  # noqa
+
+    # Build structure
+    print(f"Building structure: {problem_name}")
+    problem = PYGRANSO_PROBLEMS_BY_NAME.get(problem_name)
+
+    args = topo_api.specified_task(problem, device=device)
+    args['penal'] = penal
+    args['scale_factor'] = scale_factor
+    args['young_min'] = 1e-9
+    args['y_symmetry'] = False
+    args['x_symmetry'] = False
+
+    # Create the stiffness matrix
+    ke = topo_physics.get_stiffness_matrix(
+        young=args['young'],
+        poisson=args['poisson'],
+        device=device,
+    ).double()
+
+    cnn_kwargs = {
+        'latent_size': latent_size,
+        'dense_channels': dense_channels,
+        'kernel_size': kernel_size,
+        'conv_filters': conv_filters,
+    }
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 5))
+    axes = axes.flatten()
+
+    first_stage_maxit = 4000
+
+    # Trials and seeds
+    seeds = [0, 10]
+    for idx, seed in enumerate(seeds):
+        ax = axes[idx]
+
+        # Intialize random seed
+        utils.build_random_seed(seed)
+        cnn_kwargs['random_seed'] = seed
+
+        model = models.MultiMaterialCNNModel(args, **cnn_kwargs).to(
+            device=device, dtype=torch.double
+        )
+
+        # Calculate the initial compliance
+        model.eval()
+        with torch.no_grad():
+            (
+                initial_compliance,
+                x_phys,
+                _,
+                _,
+            ) = topo_physics.calculate_multi_material_compliance(
+                model, ke, args, device, torch.double
+            )
+
+        # Detach calculation and use it for scaling in PyGranso
+        initial_compliance = (
+            torch.ceil(initial_compliance.to(torch.float64).detach()) + 1.0
+        )
+
+        # Train PyGranso MMTO - First Stage
+        # Setup the combined function for PyGranso
+        comb_fn = lambda model: train.multi_material_constraint_function(  # noqa
+            model,
+            initial_compliance,
+            ke,
+            args,
+            device=device,
+            dtype=torch.double,
+        )
+
+        train.train_pygranso_mmto(
+            model=model, comb_fn=comb_fn, maxit=first_stage_maxit, device=device
+        )
+
+        # Get the final design
+        (
+            compliance,
+            final_design,
+            _,
+            _,
+        ) = topo_physics.calculate_multi_material_compliance(
+            model, ke, args, device, torch.double
+        )
+        final_design = final_design.detach().numpy()
+
+        design = final_design[:, 1].reshape(128, 128).T
+
+        ax.imshow(design, cmap='Greys', aspect="auto")
+        ax.set_title(f'Compliance = {compliance}')
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    path = os.path.join(save_path, 'single-bridge-results.png')
+    fig.savefig(path)
+
+
+@cli.command('test-single-material-l-shape')
+def test_single_material_l_shape():
+    # For testing, we will run two experimentation trackers
+    API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
+    PROJECT_NAME = 'Topology-Optimization'
+
+    penal = 3.0
+    scale_factor = 1.0
+    latent_size = 96
+    dense_channels = 24
+    kernel_size = (11, 11)
+    ks_string = ",".join(map(str, kernel_size))
+
+    # DIP Setup
+    conv_filters = (256 // 2, 128 // 2, 64 // 2, 32 // 2)
+    cv_string = ",".join(map(str, conv_filters))
+
+    # Enable wandb
+    wandb.login(key=API_KEY)
+
+    # Initalize wandb
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project=PROJECT_NAME,
+        tags=[
+            'topology-optimization-task',
+            'single-material l-shape',
+        ],
+        config={
+            'latent_size': latent_size,
+            'dense_channels': dense_channels,
+            'kernel_size': ks_string,
+            'conv_filters': cv_string,
+            'penal': penal,
+            'scale_factor': scale_factor,
+        },
+    )
+
+    # Create directory for saving the model and
+    # output data
+    save_path = os.path.join(
+        '/users/5/dever120/NCVX-Neural-Structural-Optimization/results',
+        f'{wandb.run.id}',
+    )
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        print(f"The directory {save_path} was created.")
+    else:
+        print(f"The directory {save_path} already exists.")
+
+    device = torch.device('cpu')
+
+    problem_name = 'l_shape_0.4_128x128_0.3'
+
+    # Build the problems for pygranso and google
+    PYGRANSO_PROBLEMS_BY_NAME = problems.build_problems_by_name(device=device)  # noqa
+
+    # Build structure
+    print(f"Building structure: {problem_name}")
+    problem = PYGRANSO_PROBLEMS_BY_NAME.get(problem_name)
+
+    args = topo_api.specified_task(problem, device=device)
+    args['penal'] = penal
+    args['scale_factor'] = scale_factor
+    args['young_min'] = 1e-9
+    args['y_symmetry'] = False
+    args['x_symmetry'] = False
+
+    # Create the stiffness matrix
+    ke = topo_physics.get_stiffness_matrix(
+        young=args['young'],
+        poisson=args['poisson'],
+        device=device,
+    ).double()
+
+    cnn_kwargs = {
+        'latent_size': latent_size,
+        'dense_channels': dense_channels,
+        'kernel_size': kernel_size,
+        'conv_filters': conv_filters,
+    }
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 5))
+    axes = axes.flatten()
+
+    first_stage_maxit = 1500
+
+    # Trials and seeds
+    seeds = [0, 10, 20, 30]
+    for idx, seed in enumerate(seeds):
+        ax = axes[idx]
+
+        # Intialize random seed
+        utils.build_random_seed(seed)
+        cnn_kwargs['random_seed'] = seed
+
+        model = models.MultiMaterialCNNModel(args, **cnn_kwargs).to(
+            device=device, dtype=torch.double
+        )
+
+        # Calculate the initial compliance
+        model.eval()
+        with torch.no_grad():
+            (
+                initial_compliance,
+                x_phys,
+                _,
+                _,
+            ) = topo_physics.calculate_multi_material_compliance(
+                model, ke, args, device, torch.double
+            )
+
+        # Detach calculation and use it for scaling in PyGranso
+        initial_compliance = (
+            torch.ceil(initial_compliance.to(torch.float64).detach()) + 1.0
+        )
+
+        # Train PyGranso MMTO - First Stage
+        # Setup the combined function for PyGranso
+        comb_fn = lambda model: train.multi_material_constraint_function(  # noqa
+            model,
+            initial_compliance,
+            ke,
+            args,
+            device=device,
+            dtype=torch.double,
+        )
+
+        train.train_pygranso_mmto(
+            model=model, comb_fn=comb_fn, maxit=first_stage_maxit, device=device
+        )
+
+        # Get the final design
+        (
+            compliance,
+            final_design,
+            _,
+            _,
+        ) = topo_physics.calculate_multi_material_compliance(
+            model, ke, args, device, torch.double
+        )
+        final_design = final_design.detach().numpy()
+
+        design = final_design[:, 1].reshape(128, 128).T
+
+        ax.imshow(design, cmap='Greys', aspect="auto")
+        ax.set_title(f'Compliance = {compliance}')
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    path = os.path.join(save_path, 'single-l-shape-results.png')
+    fig.savefig(path)
+
+
+@cli.command('test-single-material-mbb-beam')
+def test_single_material_mbb_beam():
+    # For testing, we will run two experimentation trackers
+    API_KEY = '2080070c4753d0384b073105ed75e1f46669e4bf'
+    PROJECT_NAME = 'Topology-Optimization'
+
+    penal = 3.0
+    scale_factor = 1.0
+    latent_size = 96
+    dense_channels = 24
+    kernel_size = (5, 5)
+    ks_string = ",".join(map(str, kernel_size))
+
+    # DIP Setup
+    conv_filters = (256 // 2, 128 // 2, 64 // 2, 32 // 2)
+    cv_string = ",".join(map(str, conv_filters))
+
+    # Enable wandb
+    wandb.login(key=API_KEY)
+
+    # Initalize wandb
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project=PROJECT_NAME,
+        tags=[
+            'topology-optimization-task',
+            'single-material mbb-beam',
+        ],
+        config={
+            'latent_size': latent_size,
+            'dense_channels': dense_channels,
+            'kernel_size': ks_string,
+            'conv_filters': cv_string,
+            'penal': penal,
+            'scale_factor': scale_factor,
+        },
+    )
+
+    # Create directory for saving the model and
+    # output data
+    save_path = os.path.join(
+        '/users/5/dever120/NCVX-Neural-Structural-Optimization/results',
+        f'{wandb.run.id}',
+    )
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        print(f"The directory {save_path} was created.")
+    else:
+        print(f"The directory {save_path} already exists.")
+
+    device = torch.device('cpu')
+
+    problem_name = 'mbb_beam_96x32_0.5'
+
+    # Build the problems for pygranso and google
+    PYGRANSO_PROBLEMS_BY_NAME = problems.build_problems_by_name(device=device)  # noqa
+
+    # Build structure
+    print(f"Building structure: {problem_name}")
+    problem = PYGRANSO_PROBLEMS_BY_NAME.get(problem_name)
+
+    args = topo_api.specified_task(problem, device=device)
+    args['penal'] = penal
+    args['scale_factor'] = scale_factor
+    args['young_min'] = 1e-9
+    args['y_symmetry'] = False
+    args['x_symmetry'] = False
+
+    # Create the stiffness matrix
+    ke = topo_physics.get_stiffness_matrix(
+        young=args['young'],
+        poisson=args['poisson'],
+        device=device,
+    ).double()
+
+    cnn_kwargs = {
+        'latent_size': latent_size,
+        'dense_channels': dense_channels,
+        'kernel_size': kernel_size,
+        'conv_filters': conv_filters,
+    }
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 5))
+    axes = axes.flatten()
+
+    first_stage_maxit = 1500
+
+    # Trials and seeds
+    seeds = [0, 10, 20, 30]
+    for idx, seed in enumerate(seeds):
+        ax = axes[idx]
+
+        # Intialize random seed
+        utils.build_random_seed(seed)
+        cnn_kwargs['random_seed'] = seed
+
+        model = models.MultiMaterialCNNModel(args, **cnn_kwargs).to(
+            device=device, dtype=torch.double
+        )
+
+        # Calculate the initial compliance
+        model.eval()
+        with torch.no_grad():
+            (
+                initial_compliance,
+                x_phys,
+                _,
+                _,
+            ) = topo_physics.calculate_multi_material_compliance(
+                model, ke, args, device, torch.double
+            )
+
+        # Detach calculation and use it for scaling in PyGranso
+        initial_compliance = (
+            torch.ceil(initial_compliance.to(torch.float64).detach()) + 1.0
+        )
+
+        # Train PyGranso MMTO - First Stage
+        # Setup the combined function for PyGranso
+        comb_fn = lambda model: train.multi_material_constraint_function(  # noqa
+            model,
+            initial_compliance,
+            ke,
+            args,
+            device=device,
+            dtype=torch.double,
+        )
+
+        train.train_pygranso_mmto(
+            model=model, comb_fn=comb_fn, maxit=first_stage_maxit, device=device
+        )
+
+        # Get the final design
+        (
+            compliance,
+            final_design,
+            _,
+            _,
+        ) = topo_physics.calculate_multi_material_compliance(
+            model, ke, args, device, torch.double
+        )
+        final_design = final_design.detach().numpy()
+
+        design = final_design[:, 1].reshape(96, 32).T
+
+        ax.imshow(design, cmap='Greys', aspect="auto")
+        ax.set_title(f'Compliance = {compliance}')
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    path = os.path.join(save_path, 'single-mbb-beam-results.png')
+    fig.savefig(path)
 
 
 if __name__ == "__main__":

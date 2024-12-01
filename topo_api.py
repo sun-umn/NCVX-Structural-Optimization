@@ -6,6 +6,8 @@ import torch
 
 from utils import DEFAULT_DEVICE, DEFAULT_DTYPE
 
+X, Y = 0, 1
+
 
 def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
     """
@@ -27,16 +29,17 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
     fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)
 
     params = {
-        # material properties
+        # Material properties
         "young": 1.0,
-        "young_min": 1e-9,
+        # "young_min": 1e-9,
+        "young_min": 1e-3,
         "poisson": 0.3,
         "g": 0.0,
-        # constraints
+        # Constraints
         "volfrac": problem.density,
         "xmin": 0.001,
         "xmax": 1.0,
-        # input parameters
+        # Input parameters
         "nelx": torch.tensor(problem.width),
         "nely": torch.tensor(problem.height),
         "mask": mask,
@@ -45,9 +48,134 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
         "forces": problem.forces.ravel(),
         "penal": 3.0,
         "filter_width": 2,
-        "epsilon": problem.epsilon,
         'ndof': len(alldofs),
         'tounn_mask': problem.tounn_mask,
+        # Morph into multi-material paradigm
+        'e_materials': torch.tensor([1.0], dtype=torch.double, device=device),
+        'material_density_weight': torch.tensor(
+            [1.0], dtype=torch.double, device=device
+        ),
+        'combined_frac': problem.density,
+        'x_symmetry': problem.x_symmetry,
+        'y_symmetry': problem.y_symmetry,
+    }
+    return params
+
+
+def multi_material_mbb_beam(
+    nelx: int,
+    nely: int,
+    e_materials: torch.Tensor,
+    material_density_weight: torch.Tensor,
+    combined_frac: float,
+    epsilon=1e-5,
+    device=DEFAULT_DEVICE,
+    dtype=DEFAULT_DTYPE,
+) -> Dict[str, Any]:
+    """Textbook beam example."""
+    ndof = 2 * (nelx + 1) * (nely + 1)
+
+    normals = torch.zeros((nely + 1, nelx + 1, 2)).to(device=device, dtype=dtype)
+    normals[-1, -1, Y] = 1
+    normals[0, :, X] = 1
+
+    forces = torch.zeros((nely + 1, nelx + 1, 2)).to(device=device, dtype=dtype)
+    forces[0, 0, Y] = -1
+
+    fixdofs = np.flatnonzero(normals.ravel().cpu().detach().clone())
+    alldofs = np.arange(2 * (nely + 1) * (nelx + 1))
+    freedofs = np.sort(list(set(alldofs) - set(fixdofs)))
+
+    # Variables that will utilize GPU calculations
+    # mask = torch.tensor(1.0).to(device=device, dtype=dtype)
+    freedofs = torch.tensor(freedofs).to(  # type: ignore
+        device=device, dtype=torch.long
+    )
+    fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)  # type: ignore
+
+    params = {
+        # material properties
+        "young": 1.0,
+        "young_min": 1e-9,
+        "poisson": 0.3,
+        "g": 0.0,
+        # constraints
+        "combined_frac": combined_frac,
+        "xmin": 0.001,
+        "xmax": 1.0,
+        # input parameters
+        "nelx": torch.tensor(nelx),
+        "nely": torch.tensor(nely),
+        "freedofs": freedofs,
+        "fixdofs": fixdofs,
+        "forces": forces,
+        "penal": 3.0,
+        "filter_width": 2,
+        "epsilon": epsilon,
+        "ndof": ndof,
+        "e_materials": e_materials,
+        "material_density_weight": material_density_weight,
+    }
+    return params
+
+
+def multi_material_suspended_bridge(
+    nelx,
+    nely,
+    e_materials: torch.Tensor,
+    material_density_weight: torch.Tensor,
+    combined_frac: float,
+    epsilon=1e-5,
+    span_position=0.2,
+    anchored=False,
+    device=DEFAULT_DEVICE,
+    dtype=DEFAULT_DTYPE,
+):
+    """A bridge above the ground, with supports at lower corners."""
+    ndof = 2 * (nelx + 1) * (nely + 1)
+
+    normals = torch.zeros((nelx + 1, nely + 1, 2)).to(device=device, dtype=dtype)
+    normals[-1, :, X] = 1
+    normals[: round(span_position * nelx), -1, Y] = 1
+    if anchored:
+        normals[: round(span_position * nelx), -1, X] = 1
+
+    forces = torch.zeros((nelx + 1, nely + 1, 2)).to(device=device, dtype=dtype)
+    forces[:, -1, Y] = -1 / nelx
+
+    fixdofs = np.flatnonzero(normals.ravel().cpu().detach().clone())
+    alldofs = np.arange(2 * (nely + 1) * (nelx + 1))
+    freedofs = np.sort(list(set(alldofs) - set(fixdofs)))
+
+    # Variables that will utilize GPU calculations
+    # mask = torch.tensor(1.0).to(device=device, dtype=dtype)
+    freedofs = torch.tensor(freedofs).to(  # type: ignore
+        device=device, dtype=torch.long
+    )
+    fixdofs = torch.tensor(fixdofs).to(device=device, dtype=torch.long)  # type: ignore
+
+    params = {
+        # material properties
+        "young": 1.0,
+        "young_min": 1e-9,
+        "poisson": 0.3,
+        "g": 0.0,
+        # constraints
+        "combined_frac": combined_frac,
+        "xmin": 0.001,
+        "xmax": 1.0,
+        # input parameters
+        "nelx": torch.tensor(nelx),
+        "nely": torch.tensor(nely),
+        "freedofs": freedofs,
+        "fixdofs": fixdofs,
+        "forces": forces,
+        "penal": 3.0,
+        "filter_width": 2,
+        "epsilon": epsilon,
+        "ndof": ndof,
+        "e_materials": e_materials,
+        "material_density_weight": material_density_weight,
     }
     return params
 
@@ -82,6 +210,7 @@ def multi_material_tip_cantilever_task(
     freedofs_array = np.sort(list(set(alldofs_array) - set(fixdofs_array)))
 
     # Convert to torch tensorse)
+    mask = torch.tensor(torch.tensor(1.0)).to(device=device, dtype=dtype)
     freedofs = torch.tensor(freedofs_array).to(device=device, dtype=torch.long)
     fixdofs = torch.tensor(fixdofs_array).to(device=device, dtype=torch.long)
 
@@ -98,6 +227,7 @@ def multi_material_tip_cantilever_task(
         # input parameters
         "nelx": torch.tensor(nelx),
         "nely": torch.tensor(nely),
+        "mask": mask,
         "freedofs": freedofs,
         "fixdofs": fixdofs,
         "forces": forces,
@@ -107,6 +237,8 @@ def multi_material_tip_cantilever_task(
         "ndof": len(alldofs_array),
         "e_materials": e_materials,
         "material_density_weight": material_density_weight,
+        "y_symmetry": False,
+        "x_symmetry": False,
     }
     return params
 
@@ -147,6 +279,7 @@ def multi_material_bridge_task(
     freedofs_array = np.sort(list(set(alldofs_array) - set(fixdofs_array)))
 
     # Convert to torch tensorse)
+    mask = torch.tensor(torch.tensor(1.0)).to(device=device, dtype=dtype)
     freedofs = torch.tensor(freedofs_array).to(device=device, dtype=torch.long)
     fixdofs = torch.tensor(fixdofs_array).to(device=device, dtype=torch.long)
 
@@ -163,6 +296,7 @@ def multi_material_bridge_task(
         # input parameters
         "nelx": torch.tensor(nelx),
         "nely": torch.tensor(nely),
+        "mask": mask,
         "freedofs": freedofs,
         "fixdofs": fixdofs,
         "forces": forces,
@@ -172,5 +306,15 @@ def multi_material_bridge_task(
         "ndof": len(alldofs_array),
         "e_materials": e_materials,
         "material_density_weight": material_density_weight,
+        "y_symmetry": False,
+        "x_symmetry": True,
     }
     return params
+
+
+def get_problem(problem_name):
+    """
+    Function to identify the multi-material paradigm.
+
+    TODO: Refactor to make more manageable.
+    """

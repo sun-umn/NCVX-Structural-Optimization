@@ -1,23 +1,23 @@
-default_stages: [push]
+default_stages: [pre-push]
 default_language_version:
   python: python3.9
 repos:
 - repo: local
   hooks:
   - id: isort
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
     name: isort
     entry: isort
     language: system
     types: [python]
   - id: black
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
     name: black
     entry: black -S .
     language: system
     types: [python]
   - id: mypy
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
     name: mypy
     entry: mypy --ignore-missing-imports
     language: system
@@ -26,18 +26,18 @@ repos:
   rev: v2.1.0
   hooks:
   - id: trailing-whitespace
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
   - id: check-added-large-files
   - id: check-ast
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
   - id: check-case-conflict
   - id: check-byte-order-marker
   - id: check-executables-have-shebangs
   - id: check-docstring-first
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
   - id: check-json
   - id: check-merge-conflict
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
   - id: check-symlinks
   - id: check-vcs-permalinks
   - id: check-xml
@@ -45,13 +45,13 @@ repos:
     exclude: ^chart/ds-packages/templates/
   - id: debug-statements
   - id: detect-aws-credentials
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
     args: ['--allow-missing-credentials']
   - id: detect-private-key
   - id: flake8
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
   - id: forbid-new-submodules
   - id: no-commit-to-branch
-    stages: [commit,push]
+    stages: [pre-commit,pre-push]
     args:
     - --branch=develop
