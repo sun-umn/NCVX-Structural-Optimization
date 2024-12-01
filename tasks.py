@@ -815,22 +815,16 @@ def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
     args["freedofs"] = torch.tensor(args["freedofs"])
 
     # DIP Setup
-    conv_filters = (256 // 3, 128 // 3, 64 // 3, 32 // 3)
-    cnn_kwargs = {
-        'latent_size': 96,
-        'dense_channels': 24,
-        'kernel_size': (5, 5),
-        'conv_filters': conv_filters,
-    }
+    cnn_kwargs = MODEL_CONFIGS_V2["small"]
 
     # Trials and seeds
-    num_trials = 2
-    maxit = 2
+    num_trials = 5
+    maxit = 2500
     outputs = train.train_pygranso_v2(
         args=args,
         device=device,
         cnn_kwargs=cnn_kwargs,
-        num_trials=1,
+        num_trials=num_trials,
         maxit=maxit,
     )
 

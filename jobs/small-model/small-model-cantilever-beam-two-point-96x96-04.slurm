@@ -12,4 +12,4 @@ echo $PATH
 nvidia-smi
 eval "$(conda shell.bash hook)"
 conda activate top-opt
-python -m tasks run-multi-structure-pipeline --model_size='small' --problem_name='l_shape_0.4_128x128_0.3' --kernel_size="5,5"
+python -m tasks run-multi-structure-pipeline --model_size='small' --problem_name='cantilever_beam_two_point_96x96_0.4'
