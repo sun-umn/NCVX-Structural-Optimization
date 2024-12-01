@@ -732,7 +732,7 @@ def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
 
     # Will create directories for saving models
     save_path = os.path.join(
-        '/home/jusun/dever120/NCVX-Neural-Structural-Optimization/results',
+        '/users/5/dever120/NCVX-Neural-Structural-Optimization/results',
         f'{wandb.run.id}',  # type: ignore
     )
     if not os.path.exists(save_path):
@@ -942,7 +942,7 @@ def run_multi_structure_pipeline(
     # Create directory for saving the model and
     # output data
     save_path = os.path.join(
-        '/home/jusun/dever120/NCVX-Neural-Structural-Optimization/results',
+        '/users/5/dever120/NCVX-Neural-Structural-Optimization/results',
         f'{wandb.run.id}',  # type: ignore
     )
     if not os.path.exists(save_path):
