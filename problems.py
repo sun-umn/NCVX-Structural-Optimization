@@ -104,12 +104,11 @@ def mbb_beam(
 
 
 def mbb_beam_with_circular_non_design_region(
-    width=60,
-    height=20,
-    density=0.5,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
+    width: int = 60,
+    height: int = 20,
+    density: float = 0.5,
+    device: torch.device = DEFAULT_DEVICE,
+    dtype: torch.dtype = DEFAULT_DTYPE,
 ):
     """Textbook beam example."""
     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
@@ -136,20 +135,19 @@ def mbb_beam_with_circular_non_design_region(
             if distance <= radius:
                 mask[y, x] = 0
 
-    mask = torch.tensor(mask)
-    mask = mask.to(device=device, dtype=dtype)
+    mask = torch.tensor(mask)  # type: ignore
+    mask = mask.to(device=device, dtype=dtype)  # type: ignore
 
-    return Problem(normals, forces, density, mask)
+    return Problem(normals, forces, density, mask=mask)  # type: ignore
 
 
 def cantilever_beam_full(
-    width=60,
-    height=60,
-    density=0.5,
-    force_position=0,
-    epsilon=1e-3,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
+    width: int = 60,
+    height: int = 60,
+    density: float = 0.5,
+    force_position: int = 0,
+    device: torch.device = DEFAULT_DEVICE,
+    dtype: torch.dtype = DEFAULT_DTYPE,
 ):
     """Cantilever supported everywhere on the left"""
     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
