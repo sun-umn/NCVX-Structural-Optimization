@@ -160,13 +160,13 @@ def cantilever_beam_full(
 
 
 def cantilever_beam_two_point(
-    width=60,
-    height=60,
-    density=0.5,
-    support_position=0.25,
-    force_position=0.5,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
+    width: int = 60,
+    height: int = 60,
+    density: float = 0.5,
+    support_position: float = 0.25,
+    force_position: float = 0.5,
+    device: torch.device = DEFAULT_DEVICE,
+    dtype: torch.dtype = DEFAULT_DTYPE,
 ):
     """Cantilever supported by two points"""
     normals = torch.zeros((width + 1, height + 1, 2)).to(device=device, dtype=dtype)
@@ -183,12 +183,12 @@ def cantilever_beam_two_point(
 
 
 def pure_bending_moment(
-    width=60,
-    height=60,
-    density=0.5,
-    support_position=0.45,
-    device=DEFAULT_DEVICE,
-    dtype=DEFAULT_DTYPE,
+    width: int = 60,
+    height: int = 60,
+    density: float = 0.5,
+    support_position: float = 0.45,
+    device: torch.device = DEFAULT_DEVICE,
+    dtype: torch.dtype = DEFAULT_DTYPE,
 ):
     """Pure bending forces on a beam."""
     # Figure 28 from
