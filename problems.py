@@ -296,7 +296,6 @@ def l_shape(
     density=0.5,
     aspect=0.4,
     force_position=0.5,
-    epsilon=1e-3,
     device=DEFAULT_DEVICE,
     dtype=DEFAULT_DTYPE,
 ):
@@ -322,7 +321,7 @@ def l_shape(
 
     tounn_mask = {'x>': min_x, 'x<': max_x, 'y>': min_y, 'y<': max_y}
 
-    return Problem(normals, forces, density, mask, tounn_mask)
+    return Problem(normals, forces, density, mask=mask, tounn_mask=tounn_mask)
 
 
 def crane(

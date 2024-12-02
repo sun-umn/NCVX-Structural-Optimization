@@ -163,7 +163,7 @@ def multi_material_constraint_function_v2(
     epsilon = args["epsilon"]
     discrete_constraint = 0
     for i in range(num_materials):
-        material_channel_values = x_phys[:, i].flatten()
+        material_channel_values = x_phys[:, i + 1].flatten()
         discrete_constraint_value = torch.norm(
             material_channel_values * (1 - material_channel_values), p=1
         )
