@@ -151,7 +151,7 @@ def build_optimization_trajectories(
 
 def _plot_design(
     design: np.ndarray,
-    ax: matplotlib.axes._subplots.Subplot,
+    ax: matplotlib.axes._subplots.Axes,
     loss: float,
     binary_constraint: float,
     volume_constraint: float,
@@ -234,8 +234,8 @@ def build_designs(path: str, problem_name: str, experiment_id: str) -> None:
     # NTO-PCO
     design = pygranso_data[0]
     loss = pygranso_data[1]
-    binary_constraint = np.abs(pygranso_data[2])
-    volume_constraint = np.abs(pygranso_data[3])
+    binary_constraint = np.round(np.abs(pygranso_data[2]), 6)
+    volume_constraint = np.round(np.abs(pygranso_data[3]), 6)
 
     requires_flip = False
     if 'bridge' in problem_name:

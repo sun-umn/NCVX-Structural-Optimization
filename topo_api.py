@@ -29,7 +29,6 @@ def specified_task(problem, device=DEFAULT_DEVICE, dtype=DEFAULT_DTYPE):
     params = {
         # Material properties
         "young": 1.0,
-        # "young_min": 1e-9,
         "young_min": 1e-3,
         "poisson": 0.3,
         "g": 0.0,
