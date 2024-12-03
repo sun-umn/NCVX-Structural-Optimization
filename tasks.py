@@ -33,7 +33,9 @@ from TOuNN.TOuNN import TopologyOptimizer
 warnings.filterwarnings('ignore')
 
 # Global variables
-CNN_FEATURES = (256, 128, 64, 32)
+# CNN_FEATURES = (256, 128, 64, 32)
+CNN_FEATURES = (256, 128, 64)
+RESIZES = (1, 2, 2, 2)
 MODEL_CONFIGS = {
     'small': {
         'latent_size': 96,
@@ -57,6 +59,7 @@ MODEL_CONFIGS_V2 = {
         'latent_size': 96,
         'dense_channels': 24,
         'conv_filters': tuple(feature // 3 for feature in CNN_FEATURES),
+        'resizes': RESIZES,
     },
     'medium': {
         'latent_size': 96,
@@ -177,15 +180,7 @@ def build_outputs(problem_name: str, outputs: dict[str, Any], epsilon: float = 5
     # Get all final objects
     best_final_design = final_designs[0, :, :, :].squeeze()
     best_full_final_design = best_final_design
-
-    multiplier_list = []
-    for i in range(best_final_design.shape[0]):
-        channel_multiplier = np.ones_like(best_final_design[0, :, :]) * (i + 1)
-        multiplier_list.append(channel_multiplier)
-
-    multiplier = np.asarray(multiplier_list)
-    best_final_design = best_final_design * multiplier
-    best_final_design = best_final_design.sum(axis=0)
+    best_final_design = best_final_design.argmax(axis=0)
 
     # Compute the binary and volume constraints
     binary_constraint_array = outputs["binary_constraint"][:, losses_indexes]
@@ -818,7 +813,7 @@ def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
     cnn_kwargs = MODEL_CONFIGS_V2["small"]
 
     # Trials and seeds
-    num_trials = 5
+    num_trials = 1
     maxit = 2500
     outputs = train.train_pygranso_v2(
         args=args,

@@ -253,7 +253,7 @@ class MultiMaterialCNNModel(nn.Module):
         super().__init__()
         set_seed(random_seed)
         self.args = args
-        self.multiplier = 32
+        self.multiplier = 8
         print(kernel_size)
 
         # Update the convolutional filters for the expected
@@ -312,7 +312,11 @@ class MultiMaterialCNNModel(nn.Module):
         offset_filters = dense_channels_tuple + offset_filters_tuple
 
         # Performed very well!
-        kernel_sizes = [(5, 5), (5, 5), (7, 7), (9, 9), (9, 9)]
+        # kernel_sizes = [(5, 5), (5, 5), (7, 7), (9, 9), (9, 9)]
+        # kernel_sizes = [(5, 5), (5, 5), (9, 9), (11, 11), (11, 11)]
+        kernel_sizes = [(5, 5), (5, 5), (9, 9), (9, 9)]
+        # kernel_sizes = [(7, 7), (7, 7), (11, 11), (11, 11)]
+        # kernel_sizes = [(3, 3), (3, 3), (5, 5), (5, 5)]
 
         for resize, in_channels, out_channels, kernel_size in zip(
             self.resizes, offset_filters, conv_filters, kernel_sizes

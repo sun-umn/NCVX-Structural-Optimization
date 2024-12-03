@@ -548,7 +548,7 @@ def thin_support_bridge(
         : round(height * (1 - design_width)),  # noqa
     ] = 0  # noqa
 
-    return Problem(normals, forces, density, mask)
+    return Problem(normals, forces, density, mask=mask)
 
 
 def drawbridge(
@@ -822,7 +822,7 @@ def multi_material_bridge(
         "g": 0.0,
         # constraints
         "combined_frac": density,
-        "volfrac": 0.7,
+        "volfrac": 0.4,
         "xmin": 0.001,
         "xmax": 1.0,
         # input parameters
@@ -1008,6 +1008,9 @@ def build_problems_by_name(device=DEFAULT_DEVICE):
                 span_position=0.1,
                 anchored=True,
                 device=device,  # noqa
+            ),
+            suspended_bridge(
+                256, 256, density=0.1, span_position=0.1, anchored=True, device=device
             ),
             suspended_bridge(
                 256,

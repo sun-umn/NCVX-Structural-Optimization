@@ -134,19 +134,19 @@ def multi_material_constraint_function_v2(
         mask,
     ) = topo_physics.calculate_multi_material_compliance(model, ke, args, device, dtype)
 
-    # Compute the void compliance
-    (
-        void_compliance,
-        _,
-        _,
-    ) = topo_physics.calculate_void_compliance(model, ke, args, device, dtype)
+    # # Compute the void compliance
+    # (
+    #     void_compliance,
+    #     _,
+    #     _,
+    # ) = topo_physics.calculate_void_compliance(model, ke, args, device, dtype)
 
     # Model in training mode
     model.train()
 
     # Pygranso setup
     f = 1.0 / initial_compliance * compliance
-    f_void = 1.0 / initial_void_compliance * void_compliance
+    # f_void = 1.0 / initial_void_compliance * void_compliance
 
     ce = pygransoStruct()
     ci = None
@@ -162,8 +162,8 @@ def multi_material_constraint_function_v2(
     # Compute the discrete (binary) constraint
     epsilon = args["epsilon"]
     discrete_constraint = 0
-    for i in range(num_materials):
-        material_channel_values = x_phys[:, i].flatten()
+    for i in range(num_materials - 1):
+        material_channel_values = x_phys[:, i + 1].flatten()
         discrete_constraint_value = torch.norm(
             material_channel_values * (1 - material_channel_values), p=1
         )
@@ -214,8 +214,9 @@ def multi_material_constraint_function_v2(
     # NOTE: I ran this with the inequality constraint for
     # single material and it seems that the inequality constraint
     # has a stronger preference than equality
-    void_mass = (1 - x_phys[:, 0]).mean()
-    void_constraint = (void_mass / args['volfrac']) - 1.0
+    void_mass = (1 - logits[0, :, :]) * mask.int()
+    void_mass_mean = void_mass.mean()
+    void_constraint = (void_mass_mean / args['volfrac']) - 1.0
 
     if num_materials > 2:
         ci = pygransoStruct()
@@ -253,7 +254,7 @@ def multi_material_constraint_function_v2(
     gc.collect()
     torch.cuda.empty_cache()
 
-    return (f + f_void) / 2.0, ci, ce
+    return f, ci, ce
 
 
 # Updated Section for training PyGranso with Direct Volume constraints
@@ -688,8 +689,8 @@ def train_pygranso_v2(
         opts.maxit = maxit
         opts.print_frequency = 1
         opts.stat_l2_model = False
-        opts.viol_eq_tol = 1e-4
-        opts.opt_tol = 1e-4
+        opts.viol_eq_tol = 1e-6
+        opts.opt_tol = 1e-6
 
         # Setup logging for pygranso
         mHLF_obj = utils.HaltLog()

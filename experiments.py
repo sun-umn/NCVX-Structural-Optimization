@@ -457,7 +457,7 @@ def build_symmetry_result(path: str, experiment_id: str) -> None:
         np.abs(trajectory_data['volume_constraint'].flatten())
     )
     symmetry_constraint = pd.Series(
-        np.abs(trajectory_data['symmetry_constraint'].flatten())
+        np.abs(trajectory_data['y_symmetry_constraint'].flatten())
     )
 
     # Build the plot
@@ -583,25 +583,24 @@ def build_multi_material_designs(
     axes = axes.flatten()
 
     # Fill colors
-    fillColors = ['white', 'black', 'red', 'blue']
+    # fillColors = ['white', 'black', 'red', 'blue']
+    fillColors = ['white', 'blue', 'red', 'black']
 
-    with open(os.path.join(path, experiment_id, f'ntopco-{seed}.pickle'), 'rb') as f:
+    with open(os.path.join(path, experiment_id, 'mm-ntopco.pickle'), 'rb') as f:
         data = pickle.load(f)
 
     # Extract the configuration of the problem
-    nelx = data['nelx']
-    nely = data['nely']
-    loss = data['compliance']
-    material_density_weight = data['material_density_weight']
-    mass_constraint = np.round(data['mass_constraint'], 2)
-    design = data['final_design']
+    final_design = data[0]
+    nelx = final_design.shape[1]
+    nely = final_design.shape[0]
+    loss = data[1]
+    mass_constraint = np.abs(np.round(data[3], 2))
 
     # Quick check for torch tensor
     if isinstance(loss, torch.Tensor):
         loss = loss.detach().numpy()
 
     loss = np.round(loss, 2)
-    final_design = np.argmax(design, axis=1).reshape(nelx, nely).T
 
     # Some of the configurations were flipped upside down
     # Flip the result of the tip-cantilever beam
@@ -649,7 +648,7 @@ def build_multi_material_designs(
     nely = data['nely']
     loss = data['compliance']
     material_density_weight = data['material_density_weight']
-    mass_constraint = np.round(data['mass_constraint'], 2)
+    mass_constraint = np.abs(np.round(data['mass_constraint'], 2))
     design = data['final_design']
 
     # Quick check for torch tensor
@@ -705,7 +704,7 @@ def build_multi_material_designs(
     nely = data['nely']
     material_density_weight = data['material_density_weight']
     loss = np.round(data['compliance'], 2)
-    volume_constraint = np.round(data['mass_constraint'], 2)
+    volume_constraint = np.abs(np.round(data['mass_constraint'], 2))
 
     median_density_weight = material_density_weight.numpy()
     design = data['final_design']
@@ -792,29 +791,27 @@ def build_multi_material_channels(
     Function that plots a single material channel for the multi-material
     topology optimization experiment.
     """
-    with open(os.path.join(path, experiment_id, f'ntopco-{seed}.pickle'), 'rb') as f:
+    with open(os.path.join(path, experiment_id, 'mm-ntopco.pickle'), 'rb') as f:
         data = pickle.load(f)
 
     # We need the configuration of the problem
-    nelx = data['nelx']
-    nely = data['nely']
-    material_density_weight = data['material_density_weight']
-
-    design = data['final_design']
+    design = data[-1]['best_final_full_design']
+    num_materials = design.shape[0] - 1
     color_list = [['gray', '1.0'], ['1.0', 'black'], ['1.0', 'red'], ['1.0', 'blue']]
     titles = ['Void', 'Material-1', 'Material-2', 'Material-3']
 
     fig, axes = plt.subplots(1, 3, figsize=(12, 2), constrained_layout=True)
     axes = axes.flatten()
-    for i in range(len(material_density_weight)):
-        material_channel = design[:, i + 1].reshape(nelx, nely).T
+    for i in range(num_materials):
+        material_channel = np.round(design[i + 1, :, :], 2)
         if problem_name == 'tip-cantilever-beam':
             material_channel = material_channel[::-1, :]
 
-        pixel_total = design.shape[0]
+        pixel_total = np.prod(design.shape)
 
         constraint = material_channel * (1 - material_channel)
-        constraint = np.round(np.linalg.norm(constraint, ord=1) / pixel_total, 5)
+        constraint_value = np.linalg.norm(constraint, ord=1) / pixel_total
+        constraint = np.maximum(0.0, np.round(constraint_value - 1e-3, 5))
 
         ax = axes[i]
         ax.imshow(
