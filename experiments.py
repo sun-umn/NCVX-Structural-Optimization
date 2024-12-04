@@ -584,7 +584,7 @@ def build_multi_material_designs(
 
     # Fill colors
     # fillColors = ['white', 'black', 'red', 'blue']
-    fillColors = ['white', 'blue', 'red', 'black']
+    fillColors = ['white', 'blue', 'red', 'black', 'gray']
 
     with open(os.path.join(path, experiment_id, 'mm-ntopco.pickle'), 'rb') as f:
         data = pickle.load(f)
@@ -608,7 +608,13 @@ def build_multi_material_designs(
         final_design = final_design[::-1, :]
 
     ax = axes[0]
-    ax.imshow(final_design, cmap=colors.ListedColormap(fillColors), aspect='auto')
+    # Update fill colors
+    color_values = list(np.unique(final_design))
+    pygranso_fillcolors = [fillColors[i] for i in color_values]
+
+    ax.imshow(
+        final_design, cmap=colors.ListedColormap(pygranso_fillcolors), aspect='auto'
+    )
     ax.axis('off')
     ax.set_title('NTO-PCO')
 
@@ -664,7 +670,11 @@ def build_multi_material_designs(
         final_design = final_design[::-1, :]
 
     ax = axes[1]
-    ax.imshow(final_design, cmap=colors.ListedColormap(fillColors), aspect='auto')
+    color_values = list(np.unique(final_design))
+    mmtounn_fillcolors = [fillColors[i] for i in color_values]
+    ax.imshow(
+        final_design, cmap=colors.ListedColormap(mmtounn_fillcolors), aspect='auto'
+    )
     ax.axis('off')
     ax.set_title('MM-TOuNN')
 
@@ -726,7 +736,9 @@ def build_multi_material_designs(
         image = image[::-1, :]
 
     ax = axes[2]
-    ax.imshow(image, cmap=colors.ListedColormap(fillColors), aspect='auto')
+    color_values = list(np.unique(image).astype(int))
+    cmmto_fillcolors = [fillColors[i] for i in color_values]
+    ax.imshow(image, cmap=colors.ListedColormap(cmmto_fillcolors), aspect='auto')
     ax.axis('off')
     ax.set_title('MMTO + Mass Constraint + OC', fontsize=14)
 

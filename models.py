@@ -1,4 +1,5 @@
 import random
+from typing import Tuple
 
 import numpy as np
 import torch
@@ -240,21 +241,20 @@ class MultiMaterialCNNModel(nn.Module):
 
     def __init__(  # noqa
         self,
-        args,
-        latent_size=128,
-        dense_channels=32,
-        resizes=(1, 2, 2, 2, 1),
-        conv_filters=(128 * 2 // 1, 64 * 2 // 1, 32 * 2 // 1, 16 * 2 // 1),
-        offset_scale=10.0,
-        kernel_size=(5, 5),
-        dense_init_scale=1.0,
-        random_seed=0,
+        args: dict,
+        latent_size: int = 128,
+        dense_channels: int = 32,
+        resizes: Tuple = (1, 2, 2, 2, 1),
+        conv_filters: Tuple = (128, 64, 32, 16),
+        offset_scale: float = 10.0,
+        kernel_sizes: list[Tuple[int, int]] = [(5, 5), (5, 5), (5, 5), (5, 5), (5, 5)],
+        dense_init_scale: float = 1.0,
+        random_seed: int = 0,
     ):
         super().__init__()
         set_seed(random_seed)
         self.args = args
         self.multiplier = 8
-        print(kernel_size)
 
         # Update the convolutional filters for the expected
         # number of material channels
@@ -276,7 +276,7 @@ class MultiMaterialCNNModel(nn.Module):
         self.dense_channels = dense_channels
         self.resizes = resizes
         self.conv_filters = conv_filters
-        self.kernel_size = kernel_size
+        self.kernel_sizes = kernel_sizes
         self.latent_size = latent_size
         self.dense_init_scale = dense_init_scale
         self.offset_scale = offset_scale
@@ -314,12 +314,12 @@ class MultiMaterialCNNModel(nn.Module):
         # Performed very well!
         # kernel_sizes = [(5, 5), (5, 5), (7, 7), (9, 9), (9, 9)]
         # kernel_sizes = [(5, 5), (5, 5), (9, 9), (11, 11), (11, 11)]
-        kernel_sizes = [(5, 5), (5, 5), (9, 9), (9, 9)]
+        # kernel_sizes = [(5, 5), (5, 5), (9, 9), (9, 9)]
         # kernel_sizes = [(7, 7), (7, 7), (11, 11), (11, 11)]
         # kernel_sizes = [(3, 3), (3, 3), (5, 5), (5, 5)]
 
         for resize, in_channels, out_channels, kernel_size in zip(
-            self.resizes, offset_filters, conv_filters, kernel_sizes
+            resizes, offset_filters, conv_filters, kernel_sizes
         ):
             convolution_layer = nn.Conv2d(
                 in_channels=in_channels,
@@ -336,7 +336,7 @@ class MultiMaterialCNNModel(nn.Module):
                 mode="fan_in",
                 nonlinearity="leaky_relu",
             )
-            nn.init.zeros_(convolution_layer.bias)
+            nn.init.zeros_(convolution_layer.bias)  # type: ignore
 
             self.conv.append(convolution_layer)
             self.global_normalization.append(GlobalNormalization())
@@ -356,10 +356,11 @@ class MultiMaterialCNNModel(nn.Module):
         self.avg_output = nn.AvgPool2d(
             kernel_size=(1, self.multiplier), stride=(1, self.multiplier), padding=0
         )
+        self.softmax = nn.Softmax(dim=0)
 
         # Set up z here otherwise it is not part of the leaf tensors
         self.z = get_seeded_random_variable(latent_size, random_seed)
-        self.z = torch.mean(self.z, axis=0)
+        self.z = torch.mean(self.z, axis=0)  # type: ignore
         self.z = nn.Parameter(self.z)
 
     def forward(self, x=None):  # noqa
@@ -404,9 +405,11 @@ class MultiMaterialCNNModel(nn.Module):
                 .permute(0, 2, 1)
             )
 
-        output = torch.exp(output)
-        normalization = torch.norm(output, p=1, dim=0)
-        output = output / normalization[None, :]
+        # output = torch.exp(output)
+        # normalization = torch.norm(output, p=1, dim=0)
+        # output = output / normalization[None, :]
+
+        output = self.softmax(output)
 
         return output
 
