@@ -1,5 +1,5 @@
 #!/bin/bash -l
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --ntasks-per-node=8
 #SBATCH --mem=70g
 #SBATCH --tmp=10g
@@ -12,4 +12,4 @@ echo $PATH
 nvidia-smi
 eval "$(conda shell.bash hook)"
 conda activate top-opt
-python -m tasks run-multi-structure-pipeline --model_size='small' --problem_name='l_shape_0.4_128x128_0.3' --kernel_size="5,5"
+python -m tasks run-multi-structure-pipeline --model_size='small' --problem_name='mbb_beam_96x32_0.5' --num_trials=2

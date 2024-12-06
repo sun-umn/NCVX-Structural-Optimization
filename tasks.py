@@ -36,6 +36,7 @@ warnings.filterwarnings('ignore')
 # CNN_FEATURES = (256, 128, 64, 32)
 CNN_FEATURES = (256, 128, 64)
 RESIZES = (1, 2, 2, 2)
+
 MODEL_CONFIGS = {
     'small': {
         'latent_size': 96,
@@ -55,6 +56,12 @@ MODEL_CONFIGS = {
 }
 
 MODEL_CONFIGS_V2 = {
+    'x-small': {
+        'latent_size': 96,
+        'dense_channels': 24,
+        'conv_filters': tuple(feature // 4 for feature in CNN_FEATURES),
+        'resizes': RESIZES,
+    },
     'small': {
         'latent_size': 96,
         'dense_channels': 24,
@@ -65,6 +72,7 @@ MODEL_CONFIGS_V2 = {
         'latent_size': 96,
         'dense_channels': 24,
         'conv_filters': tuple(feature // 2 for feature in CNN_FEATURES),
+        'resizes': RESIZES,
     },
     'large': {
         'latent_size': 96,
@@ -717,12 +725,54 @@ def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
     # Enable wandb
     wandb.login(key=API_KEY)
 
+    # Problem specifications
+    if problem_name == 'tip_cantilever_beam':
+        # Setup for classical method
+        e_materials = torch.tensor([0.0, 3.0, 2.0, 1.0], dtype=torch.double)
+        material_density_weight = torch.tensor([0.0, 1.0, 0.7, 0.4])
+
+        P = torch.tensor([1.0, 1.0, 1.0, 1.0])
+        costfrac = 1.0
+
+        args = problems.multi_material_cantilever_beam()
+        kernel_sizes = [(3, 3), (3, 3), (3, 3), (3, 3)]
+
+    elif problem_name == 'bridge':
+        e_materials = torch.tensor([0.0, 0.2, 0.6, 1.0], dtype=torch.double)
+        material_density_weight = torch.tensor([0.0, 0.4, 0.7, 1.0])
+
+        P = torch.tensor([1.0, 1.0, 1.0, 1.0])
+        costfrac = 1.0
+
+        args = problems.multi_material_bridge()
+        kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]
+
+    # DIP Setup
+    average_pool_size = 16
+    cnn_kwargs = MODEL_CONFIGS_V2["medium"]
+    cnn_kwargs['kernel_sizes'] = kernel_sizes
+    cnn_kwargs['average_pool_size'] = average_pool_size
+    kernel_sizes_string = ', '.join([str(t) for t in kernel_sizes])
+    conv_filters_string = ', '.join(map(str, cnn_kwargs['conv_filters']))  # type: ignore  # noqa
+    print(cnn_kwargs)
+
+    nelx = args["nelx"]
+    nely = args["nely"]
+    combined_frac = args["combined_frac"]
+
     # Initalize wandb
     # TODO: Save training and validation curves per fold
     wandb.init(
         # set the wandb project where this run will be logged
         project=PROJECT_NAME,
-        tags=['ntopco-mmto-task'],
+        tags=['ntopco-mmto-task', f'{problem_name}'],
+        config={
+            'latent_size': cnn_kwargs['latent_size'],
+            'dense_channels': cnn_kwargs['dense_channels'],
+            'conv_filters': conv_filters_string,
+            'kernel_sizes': kernel_sizes_string,
+            'average_pool_size': average_pool_size,
+        },
     )
 
     # Will create directories for saving models
@@ -735,30 +785,6 @@ def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
         print(f"The directory {save_path} was created.")
     else:
         print(f"The directory {save_path} already exists.")
-
-    # Problem specifications
-    if problem_name == 'tip_cantilever_beam':
-        # Setup for classical method
-        e_materials = torch.tensor([0.0, 3.0, 2.0, 1.0], dtype=torch.double)
-        material_density_weight = torch.tensor([0.0, 1.0, 0.7, 0.4])
-
-        P = torch.tensor([1.0, 1.0, 1.0, 1.0])
-        costfrac = 1.0
-
-        args = problems.multi_material_cantilever_beam()
-
-    elif problem_name == 'bridge':
-        e_materials = torch.tensor([0.0, 0.2, 0.6, 1.0], dtype=torch.double)
-        material_density_weight = torch.tensor([0.0, 0.4, 0.7, 1.0])
-
-        P = torch.tensor([1.0, 1.0, 1.0, 1.0])
-        costfrac = 1.0
-
-        args = problems.multi_material_bridge()
-
-    nelx = args["nelx"]
-    nely = args["nely"]
-    combined_frac = args["combined_frac"]
 
     # Create the stiffness matrix
     ke = topo_physics.get_stiffness_matrix(
@@ -808,9 +834,6 @@ def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
     args["forces"] = torch.tensor(args["forces"].ravel())
     args["fixdofs"] = torch.tensor(args["fixdofs"])
     args["freedofs"] = torch.tensor(args["freedofs"])
-
-    # DIP Setup
-    cnn_kwargs = MODEL_CONFIGS_V2["small"]
 
     # Trials and seeds
     num_trials = 1
@@ -881,14 +904,12 @@ def run_multi_material_pipeline(problem_name: str = 'tip_cantilever_beam'):
 
 
 @cli.command('run-multi-structure-pipeline')
-@click.option('--model_size', default='medium')
+@click.option('--model_size', default='small')
 @click.option('--problem_name', default='mbb_beam_96x32_0.5')
-@click.option('--kernel_size', default="12,12")
 @click.option('--num_trials', default=1)
 def run_multi_structure_pipeline(
     model_size: str = 'small',
     problem_name: str = 'mbb_beam_192x64_0.5',
-    kernel_size: Tuple[int, int] = (5, 5),
     num_trials: int = 1,
 ) -> None:
     """
@@ -912,7 +933,18 @@ def run_multi_structure_pipeline(
     wandb.login(key=API_KEY)
 
     # CNN kwargs
+    kernel_sizes = [(5, 5), (5, 5), (9, 9), (9, 9)]
+    average_pool_size = 16
     cnn_kwargs = MODEL_CONFIGS_V2[model_size]
+    cnn_kwargs['average_pool_size'] = average_pool_size
+    if 'bridge' in problem_name:
+        # kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]
+        kernel_sizes = [(3, 3), (3, 3), (3, 3), (3, 3)]
+
+    cnn_kwargs['kernel_sizes'] = kernel_sizes
+
+    # For monitoring with wandb
+    kernel_sizes_string = ', '.join([str(t) for t in kernel_sizes])
 
     # Initalize wandb
     trial_tag = 'single'
@@ -931,6 +963,8 @@ def run_multi_structure_pipeline(
             'latent_size': cnn_kwargs['latent_size'],
             'dense_channels': cnn_kwargs['dense_channels'],
             'conv_filters': cnn_kwargs['conv_filters'],
+            'kernel_sizes': kernel_sizes_string,
+            'average_pool_size': average_pool_size,
         },
     )
 

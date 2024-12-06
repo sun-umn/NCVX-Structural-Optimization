@@ -221,8 +221,8 @@ def multi_material_constraint_function_v2(
     if num_materials > 2:
         ci = pygransoStruct()
 
-        ci.c1 = void_constraint - 0.05
-        ci.c2 = -void_constraint + 0.05
+        ci.c1 = void_constraint - 0.005
+        ci.c2 = -void_constraint + 0.005
 
     else:
         ce.c5 = void_constraint
@@ -689,8 +689,8 @@ def train_pygranso_v2(
         opts.maxit = maxit
         opts.print_frequency = 1
         opts.stat_l2_model = False
-        opts.viol_eq_tol = 1e-6
-        opts.opt_tol = 1e-6
+        opts.viol_eq_tol = 1e-5
+        opts.opt_tol = 1e-5
 
         # Setup logging for pygranso
         mHLF_obj = utils.HaltLog()

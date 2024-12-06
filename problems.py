@@ -721,6 +721,9 @@ def multi_material_cantilever_beam(
     """
     Problem that defined configuration for multi-material
     cantilever beam
+
+    NOTE: Structure performs well with smaller kernel sizes
+    in terms of compliance.
     """
     ndof = 2 * (width + 1) * (height + 1)
 
@@ -750,7 +753,7 @@ def multi_material_cantilever_beam(
         "g": 0.0,
         # constraints
         "combined_frac": density,
-        "volfrac": 0.6,
+        "volfrac": 0.60,
         "xmin": 0.001,
         "xmax": 1.0,
         # input parameters
@@ -929,6 +932,7 @@ def build_problems_by_name(device=DEFAULT_DEVICE):
             l_shape(128, 128, aspect=0.4, density=0.3, device=device),
             l_shape(192, 192, aspect=0.4, density=0.3, device=device),
             l_shape(256, 256, aspect=0.4, density=0.2, device=device),
+            l_shape(256, 256, aspect=0.4, density=0.3, device=device),
         ],
         "crane": [
             crane(64, 64, density=0.3, device=device),

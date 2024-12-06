@@ -1,5 +1,5 @@
 #!/bin/bash -l
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --ntasks-per-node=8
 #SBATCH --mem=70g
 #SBATCH --tmp=10g
@@ -12,4 +12,4 @@ echo $PATH
 nvidia-smi
 eval "$(conda shell.bash hook)"
 conda activate top-opt
-python -m tasks run-multi-structure-pipeline --model_size='medium' --problem_name='mbb_beam_96x32_0.5' --kernel_size="11,11" --num_trials=20
+python -m tasks run-multi-structure-pipeline --model_size='small' --problem_name='anchored_suspended_bridge_128x128_0.1' --num_trials=2

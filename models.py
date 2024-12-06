@@ -244,6 +244,7 @@ class MultiMaterialCNNModel(nn.Module):
         args: dict,
         latent_size: int = 128,
         dense_channels: int = 32,
+        average_pool_size: int = 8,
         resizes: Tuple = (1, 2, 2, 2, 1),
         conv_filters: Tuple = (128, 64, 32, 16),
         offset_scale: float = 10.0,
@@ -254,7 +255,7 @@ class MultiMaterialCNNModel(nn.Module):
         super().__init__()
         set_seed(random_seed)
         self.args = args
-        self.multiplier = 8
+        self.multiplier = average_pool_size
 
         # Update the convolutional filters for the expected
         # number of material channels
@@ -369,7 +370,7 @@ class MultiMaterialCNNModel(nn.Module):
         output = output.reshape((1, self.dense_channels, self.h, self.w))
 
         layer_loop = zip(self.resizes, self.conv_filters)
-        for idx, (resize, filters) in enumerate(layer_loop):
+        for idx, (resize, _) in enumerate(layer_loop):
             output = torch.sin(output)
 
             # Upsample interpolation
@@ -390,6 +391,7 @@ class MultiMaterialCNNModel(nn.Module):
                 output = self.add_offset[idx](output)
 
         # The final output will have num_materials + 1 (void)
+        # output = self.avg_pool(output)
         output = torch.squeeze(output)
 
         if self.multiplier != 1:
@@ -405,11 +407,11 @@ class MultiMaterialCNNModel(nn.Module):
                 .permute(0, 2, 1)
             )
 
-        # output = torch.exp(output)
-        # normalization = torch.norm(output, p=1, dim=0)
-        # output = output / normalization[None, :]
+        output = torch.exp(output)
+        normalization = torch.norm(output, p=1, dim=0)
+        output = output / normalization[None, :]
 
-        output = self.softmax(output)
+        # output = self.softmax(output)
 
         return output
 
